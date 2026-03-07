@@ -181,3 +181,8 @@ cython_debug/
 .cursorindexingignore 
 node_modules/
 .node_modules/
+
+# Environment variables (Auth0 keys etc.)
+.env
+.env.local
+.env.*.local

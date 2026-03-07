@@ -4,66 +4,70 @@ import LandingPage from './pages/LandingPage'
 import RoleSelectPage from './pages/RoleSelectPage'
 import PatientDashboard from './pages/PatientDashboard'
 import DoctorDashboard from './pages/DoctorDashboard'
+import DoctorVerifyPage from './pages/DoctorVerifyPage'
 import EmergencyCard from './pages/EmergencyCard'
 
 // Extract role from Auth0 token claims
 function useUserRole() {
   const { user } = useAuth0()
   if (!user) return null
-  // Auth0 Post-Login Action injects role under this namespace
   const roles = user['https://healthconnect.app/roles'] || []
   if (Array.isArray(roles) && roles.length > 0) return roles[0].toLowerCase()
-  // Fallback: check standard roles claim
   if (user['https://healthconnect.app/role']) return user['https://healthconnect.app/role'].toLowerCase()
   return null
 }
 
-// Protected route: redirects to / if not authenticated
+// Loading spinner shared between guards
+function Spinner({ message = 'Loading...' }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <div className="w-12 h-12 border-4 border-green-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-gray-600 font-medium">{message}</p>
+      </div>
+    </div>
+  )
+}
+
+// Protected route: bounces to / if not authenticated, or wrong role
 function ProtectedRoute({ children, requiredRole }) {
   const { isAuthenticated, isLoading } = useAuth0()
   const role = useUserRole()
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-green-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
+  if (isLoading) return <Spinner />
   if (!isAuthenticated) return <Navigate to="/" replace />
-
-  if (requiredRole && role && role !== requiredRole) {
-    // Redirect to the correct dashboard based on actual role
-    return <Navigate to={`/${role}`} replace />
-  }
-
+  if (requiredRole && role && role !== requiredRole) return <Navigate to={`/${role}`} replace />
   return children
 }
 
-// After login, read role and redirect accordingly
+// Doctor route: requires auth + doctor role + credential verification
+function DoctorRoute({ children }) {
+  const { isAuthenticated, isLoading } = useAuth0()
+  const role = useUserRole()
+  const verified = sessionStorage.getItem('hc_doctor_verified') === '1'
+
+  if (isLoading) return <Spinner message="Signing you in..." />
+  if (!isAuthenticated) return <Navigate to="/" replace />
+  if (role && role !== 'doctor') return <Navigate to={`/${role}`} replace />
+  // Must complete credential verification first
+  if (!verified) return <Navigate to="/doctor-verify" replace />
+  return children
+}
+
+// After Auth0 callback, read role and redirect
 function RoleRedirect() {
   const { isAuthenticated, isLoading } = useAuth0()
   const role = useUserRole()
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-green-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Signing you in...</p>
-        </div>
-      </div>
-    )
-  }
-
+  if (isLoading) return <Spinner message="Signing you in..." />
   if (!isAuthenticated) return <LandingPage />
-  if (role === 'patient') return <Navigate to="/patient" replace />
-  if (role === 'doctor') return <Navigate to="/doctor" replace />
-  // No role assigned yet — still show landing with a message
+
+  // Use Auth0 role if set, otherwise fall back to what the user selected before login.
+  // This lets the app work even before the Auth0 Post-Login Action is configured.
+  const effectiveRole = role || sessionStorage.getItem('hc_intended_role')
+
+  if (effectiveRole === 'patient') return <Navigate to="/patient" replace />
+  if (effectiveRole === 'doctor') return <Navigate to="/doctor-verify" replace />
   return <LandingPage noRole />
 }
 
@@ -73,6 +77,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<RoleRedirect />} />
         <Route path="/role-select" element={<RoleSelectPage />} />
+
         <Route
           path="/patient"
           element={
@@ -81,14 +86,27 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+
+        {/* Credential verification gate (only for authenticated doctors) */}
         <Route
-          path="/doctor"
+          path="/doctor-verify"
           element={
             <ProtectedRoute requiredRole="doctor">
-              <DoctorDashboard />
+              <DoctorVerifyPage />
             </ProtectedRoute>
           }
         />
+
+        {/* Doctor dashboard — requires verification */}
+        <Route
+          path="/doctor"
+          element={
+            <DoctorRoute>
+              <DoctorDashboard />
+            </DoctorRoute>
+          }
+        />
+
         <Route path="/emergency/:patientId" element={<EmergencyCard />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
