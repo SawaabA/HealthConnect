@@ -56,10 +56,28 @@ function DoctorRoute({ children }) {
 
 // After Auth0 callback, read role and redirect
 function RoleRedirect() {
-  const { isAuthenticated, isLoading } = useAuth0()
+  const { isAuthenticated, isLoading, error } = useAuth0()
   const role = useUserRole()
 
   if (isLoading) return <Spinner message="Signing you in..." />
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <div className="max-w-md w-full bg-red-50 border border-red-200 rounded-2xl p-8 text-center shadow-sm">
+          <svg className="w-12 h-12 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <h2 className="text-xl font-bold text-red-900 mb-2">Authentication Error</h2>
+          <p className="text-red-700 text-sm mb-6">{error.message}</p>
+          <button onClick={() => window.location.href = '/'} className="bg-red-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:bg-red-700 transition-colors">
+            Try Again
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (!isAuthenticated) return <LandingPage />
 
   // Use Auth0 role if set, otherwise fall back to what the user selected before login.
