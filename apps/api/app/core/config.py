@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     tts_provider: str = "mock"
     elevenlabs_api_key: str | None = None
     elevenlabs_voice_id: str = "EXAVITQu4vr4xnSDxMaL"
+    elevenlabs_model_id: str = "eleven_multilingual_v2"
+    elevenlabs_output_format: str = "mp3_44100_128"
 
     storage_provider: str = "local"
     vultr_object_storage_endpoint: str | None = None

@@ -81,6 +81,11 @@ def generate_summary_audio(
         return service.synthesize_audio(summary_id=summary_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Audio generation failed: {exc}",
+        ) from exc
 
 
 @router.get("/patients/{patient_id}", response_model=list[SummaryRead])

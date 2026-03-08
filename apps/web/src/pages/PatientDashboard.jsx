@@ -1,4 +1,4 @@
-import { useAuth0 } from '@auth0/auth0-react'
+﻿import { useAuth0 } from '@auth0/auth0-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion'
@@ -20,24 +20,64 @@ import {
     prettifyCategory,
 } from '../lib/api'
 
-const mockRecords = [
-    { id: 1, date: '2025-11-14', type: 'Lab Results', doctor: 'Dr. Amir Patel', status: 'Reviewed', summary: 'HbA1c: 6.8% — within target range.' },
-    { id: 2, date: '2025-10-02', type: 'Prescription', doctor: 'Dr. Amir Patel', status: 'Active', summary: 'Metformin 500mg twice daily.' },
-    { id: 3, date: '2025-08-19', type: 'Imaging', doctor: 'Dr. Susan Kwan', status: 'Reviewed', summary: 'Chest X-ray — No abnormalities detected.' },
-    { id: 4, date: '2025-06-05', type: 'Consultation', doctor: 'Dr. James Wright', status: 'Complete', summary: 'Annual physical — all vitals normal.' },
-]
+const mockRecordsByPatient = {
+    1: [
+        { id: 101, date: '2026-02-14', type: 'Labs', doctor: 'LifeLabs', status: 'Reviewed', summary: 'HbA1c 6.8%. Glucose trend stable.' },
+        { id: 102, date: '2026-01-03', type: 'Medications', doctor: 'Dr. Dana Doctor', status: 'Active', summary: 'Insulin regimen unchanged. Continue current dosage.' },
+        { id: 103, date: '2025-12-11', type: 'Imaging Reports', doctor: 'Toronto Imaging', status: 'Reviewed', summary: 'No acute findings on chest imaging.' },
+    ],
+    2: [
+        { id: 201, date: '2026-01-30', type: 'Labs', doctor: 'LifeLabs', status: 'Reviewed', summary: 'Creatinine mildly elevated. Repeat in 6 weeks.' },
+        { id: 202, date: '2026-01-18', type: 'Medications', doctor: 'Dr. Dana Doctor', status: 'Active', summary: 'Amlodipine increased to 10mg daily.' },
+        { id: 203, date: '2025-12-29', type: 'Referral Notes', doctor: 'Renal Clinic', status: 'Complete', summary: 'Nephrology intake accepted for CKD follow-up.' },
+    ],
+    3: [
+        { id: 301, date: '2026-03-01', type: 'Emergency Summary', doctor: 'Pediatric Centre', status: 'Reviewed', summary: 'Asthma action plan updated for school nurse.' },
+        { id: 302, date: '2026-02-07', type: 'Medications', doctor: 'Dr. Dana Doctor', status: 'Active', summary: 'Rescue inhaler refill approved.' },
+        { id: 303, date: '2025-12-20', type: 'Labs', doctor: 'Kids Pulmonary Lab', status: 'Complete', summary: 'Spirometry shows mild obstruction pattern.' },
+    ],
+    4: [
+        { id: 401, date: '2026-02-20', type: 'Referral Notes', doctor: 'Neurology Intake', status: 'Pending', summary: 'Migraine referral triaged, specialist visit pending.' },
+        { id: 402, date: '2026-02-01', type: 'Imaging Reports', doctor: 'Toronto Neuro Imaging', status: 'Reviewed', summary: 'MRI normal. No intracranial red flags.' },
+        { id: 403, date: '2026-01-09', type: 'Medications', doctor: 'Dr. Dana Doctor', status: 'Active', summary: 'Acute migraine rescue plan reviewed.' },
+    ],
+}
 
-const mockRequests = [
-    { id: 1, doctor: 'Dr. Emily Sharma', specialty: 'Endocrinology', hospital: 'Toronto General', date: '2026-03-06', reason: 'Diabetes management follow-up' },
-    { id: 2, doctor: 'Dr. Marcus Lee', specialty: 'Cardiology', hospital: 'St. Michael\'s Hospital', date: '2026-03-07', reason: 'Cardiac risk assessment' },
-]
+const mockRequestsByPatient = {
+    1: [
+        { id: 1, doctor: 'Dr. Emily Sharma', specialty: 'Endocrinology', hospital: 'Toronto General', date: '2026-03-06', reason: 'Diabetes management follow-up' },
+    ],
+    2: [
+        { id: 2, doctor: 'Dr. Marcus Lee', specialty: 'Nephrology', hospital: 'St. Michael\'s Hospital', date: '2026-03-07', reason: 'Kidney function trend review' },
+    ],
+    3: [
+        { id: 3, doctor: 'Dr. Olivia Park', specialty: 'Pediatrics', hospital: 'SickKids', date: '2026-03-08', reason: 'Asthma school plan update' },
+    ],
+    4: [
+        { id: 4, doctor: 'Dr. Nina Shah', specialty: 'Neurology', hospital: 'Mount Sinai', date: '2026-03-05', reason: 'Migraine escalation check' },
+    ],
+}
 
-const mockAuditLog = [
-    { id: 1, action: 'Record Accessed', actor: 'Dr. Amir Patel', time: '2026-03-07 09:14 AM' },
-    { id: 2, action: 'Access Granted', actor: 'You', time: '2026-03-06 03:22 PM' },
-    { id: 3, action: 'Login', actor: 'You', time: '2026-03-06 03:20 PM' },
-    { id: 4, action: 'Record Accessed', actor: 'Dr. Susan Kwan', time: '2026-03-05 11:45 AM' },
-]
+const mockAuditLogByPatient = {
+    1: [
+        { id: 1, action: 'Record Accessed', actor: 'Dr. Dana Doctor', time: '2026-03-07 09:14 AM' },
+        { id: 2, action: 'Access Granted', actor: 'You', time: '2026-03-06 03:22 PM' },
+        { id: 3, action: 'Login', actor: 'You', time: '2026-03-06 03:20 PM' },
+    ],
+    2: [
+        { id: 4, action: 'Record Accessed', actor: 'Dr. Dana Doctor', time: '2026-03-06 10:45 AM' },
+        { id: 5, action: 'Access Approved', actor: 'Guardian', time: '2026-03-05 04:05 PM' },
+        { id: 6, action: 'Grant Revoked', actor: 'Patient', time: '2026-03-04 06:22 PM' },
+    ],
+    3: [
+        { id: 7, action: 'Record Accessed', actor: 'Dr. Olivia Park', time: '2026-03-08 11:05 AM' },
+        { id: 8, action: 'Guardian Approval', actor: 'Maya Guardian', time: '2026-03-08 10:58 AM' },
+    ],
+    4: [
+        { id: 9, action: 'Record Accessed', actor: 'Dr. Nina Shah', time: '2026-03-05 02:35 PM' },
+        { id: 10, action: 'Summary Generated', actor: 'System', time: '2026-03-05 02:36 PM' },
+    ],
+}
 
 const mockDependents = [
     { id: 1, name: 'Aisha Minhas', age: 8, relationship: 'Child (Legal Guardian)', condition: 'Asthma', mrn: 'MRN-2024-1201' },
@@ -102,8 +142,21 @@ function mapRequestToUi(request) {
 
 export default function PatientDashboard({ roleOverride = 'patient' }) {
     const { user, logout, getAccessTokenSilently } = useAuth0()
-    const [requests, setRequests] = useState(mockRequests)
-    const [records, setRecords] = useState(mockRecords)
+    const seededPatientId = Number.parseInt(import.meta.env.VITE_DEMO_PATIENT_ID || '1', 10)
+    const fallbackRecords = useMemo(
+        () => mockRecordsByPatient[seededPatientId] || mockRecordsByPatient[1] || [],
+        [seededPatientId],
+    )
+    const fallbackRequests = useMemo(
+        () => mockRequestsByPatient[seededPatientId] || mockRequestsByPatient[1] || [],
+        [seededPatientId],
+    )
+    const fallbackAuditLog = useMemo(
+        () => mockAuditLogByPatient[seededPatientId] || mockAuditLogByPatient[1] || [],
+        [seededPatientId],
+    )
+    const [requests, setRequests] = useState(fallbackRequests)
+    const [records, setRecords] = useState(fallbackRecords)
     const [showQR, setShowQR] = useState(false)
     const [toast, setToast] = useState(null)
     const [grantModal, setGrantModal] = useState({ isOpen: false, dependent: null })
@@ -118,12 +171,13 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
     const [auditDigestLoading, setAuditDigestLoading] = useState(false)
     const [audioBusyKey, setAudioBusyKey] = useState('')
     const authContext = useMemo(() => resolveRoleAndUserId(user, roleOverride), [user, roleOverride])
-    const seededPatientId = Number.parseInt(import.meta.env.VITE_DEMO_PATIENT_ID || '1', 10)
     const isGuardian = authContext.role === 'guardian'
     const userRoleForGreeting = isGuardian ? 'guardian' : 'patient'
     const portalDisplayName = useMemo(() => getDisplayName(user, userRoleForGreeting), [user, userRoleForGreeting])
     const portalAvatarInitial = useMemo(() => getAvatarInitial(user, userRoleForGreeting), [user, userRoleForGreeting])
-    const profilePatient = getPatients().find((patient) => patient.id === seededPatientId) || getPatients()[0] || null
+    const profilePatient = getPatients().find(
+        (patient) => Number(patient.backendPatientId ?? patient.id) === seededPatientId,
+    ) || getPatients()[0] || null
 
     const resolveTokenIfConfigured = useCallback(async () => {
         if (!import.meta.env.VITE_AUTH0_AUDIENCE) return null
@@ -157,6 +211,8 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
                 setLoadError('')
             } catch (error) {
                 if (!mounted) return
+                setRecords(fallbackRecords)
+                setRequests(fallbackRequests)
                 setLoadError(error?.message || 'Live API unavailable. Showing demo data.')
             }
         }
@@ -166,7 +222,7 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
         return () => {
             mounted = false
         }
-    }, [authContext.userId, resolveTokenIfConfigured, seededPatientId])
+    }, [authContext.userId, fallbackRecords, fallbackRequests, resolveTokenIfConfigured, seededPatientId])
 
     async function handleRequest(id, action) {
         const target = requests.find((request) => request.id === id)
@@ -244,7 +300,7 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
             const token = await resolveTokenIfConfigured()
             const digest = await generateAuditDigest({
                 patientId: seededPatientId,
-                auditEvents: mockAuditLog.map((entry) => ({
+                auditEvents: fallbackAuditLog.map((entry) => ({
                     action: entry.action,
                     actor: entry.actor,
                     created_at: entry.time,
@@ -446,7 +502,7 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
                                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                                             <div>
                                                 <p className="font-semibold text-gray-900">{r.doctor}</p>
-                                                <p className="text-sm text-gray-500">{r.specialty} · {r.hospital}</p>
+                                                <p className="text-sm text-gray-500">{r.specialty} Â· {r.hospital}</p>
                                                 <p className="text-sm text-gray-600 mt-1">Reason: <span className="italic">{r.reason}</span></p>
                                                 <p className="text-xs text-gray-400 mt-1">Requested {r.date}</p>
                                             </div>
@@ -555,7 +611,7 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
                                         <button
                                             onClick={handleGenerateAuditDigest}
                                             disabled={auditDigestLoading}
-                                            className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
+                                            className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-300"
                                         >
                                             <Sparkles size={14} />
                                             {auditDigestLoading ? 'Generating...' : 'AI Digest'}
@@ -568,7 +624,7 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
                                                     busyKey: 'audit-digest',
                                                 })}
                                                 disabled={audioBusyKey === 'audit-digest'}
-                                                className="inline-flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
+                                                className="inline-flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-orange-300"
                                             >
                                                 <Volume2 size={14} />
                                                 {audioBusyKey === 'audit-digest' ? 'Speaking...' : 'Speak'}
@@ -585,7 +641,7 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
                                     </div>
                                 ) : null}
                                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-100">
-                                    {mockAuditLog.slice(0, 3).map(log => (
+                                    {fallbackAuditLog.slice(0, 3).map(log => (
                                         <div key={log.id} className="px-5 py-4 flex items-center justify-between">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 text-xs font-bold">
@@ -690,12 +746,7 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
             {/* Record Detail Modal */}
             <AnimatePresence>
                 {viewingRecord && (() => {
-                    // Find the matching patient record in the shared store to get doctor notes + PDFs
-                    const storePatient = getPatients().find(p =>
-                        viewingRecord.doctor.includes(p.name?.split(' ').pop() || '__') ||
-                        // fallback: match by id position (mock records map 1:1 to patients)
-                        p.id === viewingRecord.id
-                    )
+                    const storePatient = profilePatient
                     return (
                         <motion.div
                             initial={{ opacity: 0 }}
@@ -715,7 +766,7 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
                                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
                                     <div>
                                         <h3 className="text-lg font-bold text-gray-900">{viewingRecord.type}</h3>
-                                        <p className="text-sm text-gray-500">{viewingRecord.date} · {viewingRecord.doctor}</p>
+                                        <p className="text-sm text-gray-500">{viewingRecord.date} Â· {viewingRecord.doctor}</p>
                                     </div>
                                     <button onClick={() => setViewingRecord(null)} className="p-2 hover:bg-gray-200 rounded-lg transition-colors">
                                         <X size={18} className="text-gray-500" />
@@ -732,7 +783,7 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
                                                 <button
                                                     onClick={() => handleGenerateSummary(viewingRecord)}
                                                     disabled={aiLoadingRecordId === viewingRecord.id}
-                                                    className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors shadow-sm"
+                                                    className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-300"
                                                 >
                                                     <Sparkles size={13} />
                                                     {aiLoadingRecordId === viewingRecord.id ? 'Generating...' : 'Explain in Plain Language'}
@@ -745,7 +796,7 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
                                                             busyKey: `record-${viewingRecord.id}`,
                                                         })}
                                                         disabled={audioBusyKey === `record-${viewingRecord.id}`}
-                                                        className="inline-flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors shadow-sm"
+                                                        className="inline-flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-orange-300"
                                                     >
                                                         <Volume2 size={13} />
                                                         {audioBusyKey === `record-${viewingRecord.id}` ? 'Speaking...' : 'Speak Summary'}
@@ -793,7 +844,7 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
                                                     >
                                                         <FileText size={18} className="text-blue-500 flex-shrink-0" />
                                                         <span className="text-sm font-medium text-blue-700 group-hover:underline truncate">{att.name}</span>
-                                                        <span className="text-xs text-blue-400 ml-auto flex-shrink-0">Open ↗</span>
+                                                        <span className="text-xs text-blue-400 ml-auto flex-shrink-0">Open â†—</span>
                                                     </a>
                                                 ))}
                                             </div>
@@ -953,5 +1004,6 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
         </div>
     )
 }
+
 
 

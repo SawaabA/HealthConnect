@@ -95,7 +95,6 @@ export default function DoctorDashboard() {
     const authContext = useMemo(() => resolveRoleAndUserId(user, 'doctor'), [user])
     const doctorDisplayName = useMemo(() => getDisplayName(user, 'doctor'), [user])
     const doctorAvatarInitial = useMemo(() => getAvatarInitial(user, 'doctor'), [user])
-    const seededPatientId = Number.parseInt(import.meta.env.VITE_DEMO_PATIENT_ID || '1', 10)
     const selectedAiPatient = useMemo(
         () => patients.find((patient) => patient.id === selectedAiPatientId) || null,
         [patients, selectedAiPatientId],
@@ -110,6 +109,19 @@ export default function DoctorDashboard() {
         p.email.toLowerCase().includes(search.toLowerCase()) ||
         p.name.toLowerCase().includes(search.toLowerCase())
     )
+
+    function resolveBackendPatientId(patient) {
+        if (backendMode !== 'fastapi') {
+            return patient?.id || Number.parseInt(import.meta.env.VITE_LEGACY_PATIENT_ID || '1', 10)
+        }
+
+        const mapped = Number.parseInt(String(patient?.backendPatientId ?? patient?.id ?? ''), 10)
+        if (Number.isFinite(mapped) && mapped > 0) return mapped
+
+        const fallback = Number.parseInt(import.meta.env.VITE_DEMO_PATIENT_ID || '1', 10)
+        if (Number.isFinite(fallback) && fallback > 0) return fallback
+        return 1
+    }
 
     function savePatientAiDraft(patientId, content) {
         setAiNotesByPatient(prev => {
@@ -177,13 +189,10 @@ export default function DoctorDashboard() {
 
     async function handleRequest(id) {
         try {
-            if (backendMode === 'fastapi' && id !== seededPatientId) {
-                throw new Error('Only the seeded demo patient is mapped to the backend right now.')
-            }
-
-            const patientName = patients.find(p => p.id === id)?.name || 'this patient'
+            const patient = patients.find(p => p.id === id) || null
+            const patientName = patient?.name || 'this patient'
             const accessRequest = await submitAccessRequest({
-                patientId: backendMode === 'fastapi' ? seededPatientId : id,
+                patientId: resolveBackendPatientId(patient),
                 reason: `Doctor requested standard review access for ${patientName}.`,
             })
             setLastRequestByPatient(prev => ({ ...prev, [id]: accessRequest?.id || null }))
@@ -219,7 +228,7 @@ export default function DoctorDashboard() {
             const token = await resolveTokenIfConfigured()
             const brief = await generateDoctorBrief({
                 requestId: lastRequestByPatient[patient.id] || null,
-                patientId: backendMode === 'fastapi' ? seededPatientId : patient.id,
+                patientId: resolveBackendPatientId(patient),
                 patientName: patient.name,
                 patientContext: buildPatientContext(patient),
                 visitContext: `Pre-visit briefing for ${patient.name}`,
@@ -259,7 +268,7 @@ export default function DoctorDashboard() {
         try {
             const token = await resolveTokenIfConfigured()
             const report = await generateContinuityReport({
-                patientId: backendMode === 'fastapi' ? seededPatientId : patient.id,
+                patientId: resolveBackendPatientId(patient),
                 doctorId: authContext.userId,
                 requestId: lastRequestByPatient[patient.id] || null,
                 patientContext: buildPatientContext(patient),
@@ -293,7 +302,7 @@ export default function DoctorDashboard() {
         try {
             const token = await resolveTokenIfConfigured()
             const recommendation = await generateVisitRecommendation({
-                patientId: backendMode === 'fastapi' ? seededPatientId : patient.id,
+                patientId: resolveBackendPatientId(patient),
                 patientName: patient.name,
                 patientContext: buildPatientContext(patient),
                 lastPhysicalDate: patient.lastPhysicalDate || patient.lastVisit || null,
@@ -818,21 +827,21 @@ export default function DoctorDashboard() {
                                             <button
                                                 onClick={() => handleGenerateBrief()}
                                                 disabled={aiLoading || !canRunBrief}
-                                                className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white text-sm font-semibold px-3 py-2 rounded-lg transition-colors"
+                                                className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white text-sm font-semibold px-3 py-2 rounded-lg transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-purple-300"
                                             >
                                                 {aiLoading ? 'Working...' : 'Generate Brief'}
                                             </button>
                                             <button
                                                 onClick={() => handleGenerateContinuity()}
                                                 disabled={aiLoading || !canRunBrief}
-                                                className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm font-semibold px-3 py-2 rounded-lg transition-colors"
+                                                className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm font-semibold px-3 py-2 rounded-lg transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-300"
                                             >
                                                 {aiLoading ? 'Working...' : 'Generate Report'}
                                             </button>
                                             <button
                                                 onClick={() => handleGenerateVisitRecommendation()}
                                                 disabled={aiLoading || !canRunBrief}
-                                                className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-sm font-semibold px-3 py-2 rounded-lg transition-colors"
+                                                className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-sm font-semibold px-3 py-2 rounded-lg transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-300"
                                             >
                                                 {aiLoading ? 'Working...' : 'Recommend Visit'}
                                             </button>
@@ -871,7 +880,7 @@ export default function DoctorDashboard() {
                                         <div className="flex flex-wrap gap-2">
                                             <button
                                                 onClick={handleSaveAiNote}
-                                                className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
+                                                className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-300"
                                             >
                                                 <Save size={13} />
                                                 Save Note
@@ -879,7 +888,7 @@ export default function DoctorDashboard() {
                                             <button
                                                 onClick={handleSpeakAiSummary}
                                                 disabled={aiSpeaking || aiLoading}
-                                                className="inline-flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
+                                                className="inline-flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-orange-300"
                                             >
                                                 <Volume2 size={13} />
                                                 {aiSpeaking ? 'Speaking...' : 'Speak Note'}
@@ -926,10 +935,13 @@ export default function DoctorDashboard() {
                             <form onSubmit={async (e) => {
                                 e.preventDefault()
                                 try {
-                                    const backendPatientId =
-                                        backendMode === 'fastapi'
-                                            ? seededPatientId
-                                            : (import.meta.env.VITE_LEGACY_PATIENT_ID || seededPatientId)
+                                    const normalizedName = requestForm.patientName.trim().toLowerCase()
+                                    const matchedPatient = patients.find(
+                                        (patient) => patient.name.trim().toLowerCase() === normalizedName,
+                                    ) || null
+                                    const backendPatientId = matchedPatient
+                                        ? resolveBackendPatientId(matchedPatient)
+                                        : Number.parseInt(import.meta.env.VITE_DEMO_PATIENT_ID || '1', 10)
                                     const accessRequest = await submitAccessRequest({
                                         patientId: backendPatientId,
                                         reason: requestForm.fromEmergencyContact
@@ -940,7 +952,7 @@ export default function DoctorDashboard() {
                                     if (accessRequest?.id) {
                                         setLastRequestByPatient(prev => ({
                                             ...prev,
-                                            [backendPatientId]: accessRequest.id,
+                                            [matchedPatient?.id || backendPatientId]: accessRequest.id,
                                         }))
                                     }
                                     const msg = requestForm.fromEmergencyContact

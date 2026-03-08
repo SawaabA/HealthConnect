@@ -188,8 +188,14 @@ class SummaryService:
 
         audio = self.tts_provider.synthesize(text=summary.content, voice_id=voice_id)
         storage_key = f"summaries/{summary.id}.mp3"
-        self.storage_provider.upload_bytes(key=storage_key, content=audio, content_type="audio/mpeg")
-        summary.audio_storage_key = storage_key
+        try:
+            self.storage_provider.upload_bytes(key=storage_key, content=audio, content_type="audio/mpeg")
+            summary.audio_storage_key = storage_key
+        except Exception:
+            # Demo fallback: if remote object storage is misconfigured, keep audio usable locally.
+            local_storage = LocalStorageProvider()
+            local_storage.upload_bytes(key=storage_key, content=audio, content_type="audio/mpeg")
+            summary.audio_storage_key = f"local:{storage_key}"
         self.summaries.save(summary)
 
         self.audit.log(
@@ -207,6 +213,9 @@ class SummaryService:
             raise ValueError("Summary not found")
         if not summary.audio_storage_key:
             raise ValueError("Audio has not been generated for this summary")
+        if summary.audio_storage_key.startswith("local:"):
+            key = summary.audio_storage_key.removeprefix("local:")
+            return LocalStorageProvider().download_bytes(key=key)
         return self.storage_provider.download_bytes(key=summary.audio_storage_key)
 
     def update_summary_content(self, *, summary_id: int, content: str):

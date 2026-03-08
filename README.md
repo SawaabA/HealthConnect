@@ -1,312 +1,400 @@
-# HealthConnect Monorepo Starter
+﻿# HealthConnect - Final Monorepo Demo Guide
 
-HealthConnect is a patient-controlled healthcare consent and access layer for the Canadian healthcare ecosystem.  
-It does not replace hospital EHRs; it governs scoped, time-bound access to fragmented records with strong auditability.
+HealthConnect is a patient-controlled consent and access layer for healthcare records in the Canadian ecosystem.
+It does not replace hospital EHR systems. It controls who can access which record categories, for how long, and captures full audit history.
 
-## Project Overview
+## Hackathon Submission Snapshot
 
-Core workflow:
+### Fun Project Description
 
-1. Doctor authenticates with Auth0 and requests access.
-2. Request includes categories, reason, and duration.
-3. Patient or guardian approves/denies.
-4. If approved, scoped access grant is issued.
-5. Doctor can view only approved categories.
-6. Access auto-expires and all events are audited.
+HealthConnect is the privacy-focused "permission switchboard" for healthcare.
+Instead of copying patient data into a new mega-database, we sit between patients and fragmented systems so people can say:
+"Yes, this doctor can see my labs and meds for 24 hours," or "No, not that file."
 
-Supported roles:
+The MVP combines consent workflows, AI-generated explanations, and read-aloud accessibility so patients and guardians can understand what they are approving, while providers get fast, scoped access and a full audit trail.
 
-- `patient`
-- `guardian`
-- `doctor`
-- `admin`
+### Public Code Repository
 
-Supported record categories:
+- GitHub: `https://github.com/<your-org-or-username>/healthconnect`
+- Replace with your real public repo URL before submission.
 
-- `allergies`
-- `medications`
-- `labs`
-- `imaging_reports`
-- `referral_notes`
-- `emergency_summary`
+### Tools, Libraries, and Hardware Used
 
-## Architecture Diagram
+#### Frontend
 
-```mermaid
-flowchart LR
-  subgraph Frontend["apps/web (Vite React + Tailwind + Auth0)"]
-    UI[Dashboards + Record Viewer]
-  end
+- Vite
+- React (JSX)
+- Tailwind CSS
+- Framer Motion
+- Recharts
+- Lucide React
+- Auth0 React SDK
 
-  subgraph Backend["apps/api (FastAPI + Service Layer)"]
-    Routes[Routes]
-    Services[Services]
-    Repos[Repositories]
-    Models[SQLAlchemy Models]
-  end
+#### Backend
 
-  subgraph Data["PostgreSQL"]
-    DB[(users, patients, requests, grants, records, audits, summaries)]
-  end
+- Python 3
+- FastAPI
+- Pydantic
+- SQLAlchemy
+- Psycopg
+- PostgreSQL
+- HTTPX
+- Boto3 (S3-compatible storage client)
 
-  subgraph Providers["External Providers"]
-    Auth0[Auth0 + RBAC]
-    Backboard[Backboard.ai Agents]
-    ElevenLabs[ElevenLabs TTS]
-    VultrObj[Vultr Object Storage]
-  end
+#### AI, Accessibility, and Cloud
 
-  UI --> Routes
-  Routes --> Services --> Repos --> Models --> DB
-  Services --> Backboard
-  Services --> ElevenLabs
-  Services --> VultrObj
-  UI --> Auth0
-  Routes --> Auth0
-```
+- Backboard (AI orchestration/provider integration)
+- ElevenLabs (text-to-speech)
+- Vultr Compute
+- Vultr Object Storage
+- Tailscale private networking
 
-## Technology Stack
+#### Dev and Infra
 
-- Frontend: Vite + React (JSX), TailwindCSS, Auth0 React SDK
-- Backend: FastAPI, Pydantic, SQLAlchemy, PostgreSQL
-- Infra: Docker, Docker Compose, Vultr deployment placeholders, Vultr Object Storage integration points
-- Networking: Tailscale private-network model with optional Tailscale Funnel demo exposure
-- Auth: Auth0 + RBAC role model (`patient`, `guardian`, `doctor`, `admin`)
-- AI: Backboard provider abstraction (`BackboardProvider`, `MockProvider`)
-- Accessibility: ElevenLabs TTS abstraction (`ElevenLabsProvider`, `MockTTSProvider`)
+- Docker
+- Docker Compose
+- npm / Node.js
+- pytest
+- ESLint
 
-## Demo Backend Decision
+#### Hardware / Devices Used
 
-Pick one backend contract as your demo source of truth before final QA:
+- Developer laptops (Windows + macOS)
+- Vultr cloud VM (backend hosting)
+- Speakers/headphones for TTS validation
+- Smartphone browser for mobile UI and QR/accessibility checks
 
-1. `fastapi` mode (default)
-   - Web calls `apps/api` endpoints under `/api/v1`.
-   - Uses seeded integer IDs (`patient=1`, `guardian=2`, `doctor=3`, `admin=4`).
-   - Best when your FastAPI stack is what you are pitching.
-2. `legacy` mode (partner Node/Express server)
-   - Web calls partner endpoints under `/api/...` on the Vultr host.
-   - Supports partner AI agent endpoints (`/api/ai/*`, `/api/reports/generate`).
-   - Best when partner backend is what you are pitching.
+### Sponsor Category Tags (If Applicable)
 
-Switching mode is env-only:
+- `Auth0`
+- `Vultr`
+- `Tailscale`
+- `Backboard`
+- `ElevenLabs`
+- `Healthcare`
+- `AI`
+- `Accessibility`
+- `Privacy`
+- `Security`
+## What This Build Includes
 
-- `VITE_BACKEND_MODE=fastapi` or `VITE_BACKEND_MODE=legacy`
-- `VITE_API_URL` / `VITE_FASTAPI_URL` for FastAPI
-- `VITE_LEGACY_API_URL` for partner backend
+- Frontend: Vite + React + Tailwind + Auth0 + dashboard UX
+- Backend: FastAPI + Pydantic + SQLAlchemy + PostgreSQL
+- Providers:
+  - AI: MockProvider and BackboardProvider
+  - TTS: MockTTSProvider and ElevenLabsProvider
+  - Storage: LocalStorageProvider and VultrObjectStorageProvider
+- Networking model: Tailscale private networking + optional public demo URL
+- Consent workflow: request -> approve/deny -> scoped access grant -> expiration/revocation
+
+## Core Roles
+
+- patient
+- guardian
+- doctor
+- admin
+
+## Record Categories
+
+- allergies
+- medications
+- labs
+- imaging_reports
+- referral_notes
+- emergency_summary
 
 ## Monorepo Structure
 
 ```text
 apps/
-  web/                  # Vite React app (partner UX + FastAPI integration)
-  api/                  # FastAPI app (routes/services/repositories/providers)
+  api/                    # FastAPI backend
+    app/
+      routes/
+      services/
+      repositories/
+      providers/
+      models/
+      schemas/
+      scripts/seed.py
+  web/                    # React frontend (Vite)
+    src/
+      pages/
+      lib/
+      store/
 
 packages/
-  ui/                   # Shared UI primitives
-  types/                # Shared TypeScript domain types
-  config/               # Shared env validation helpers
+  ui/
+  types/
+  config/
 
 infra/
   docker-compose.yml
   env/*.env.example
-  deployment/README.md  # Vultr + Tailscale deployment placeholders
+  deployment/
 ```
 
-## Backend Service Architecture
+## Architecture
 
-`apps/api/app` includes:
+```mermaid
+flowchart LR
+  subgraph Web[apps/web]
+    UX[Doctor, Patient, Guardian, Admin Dashboards]
+    APIClient[src/lib/api.js]
+  end
 
-- `routes/`: HTTP boundaries and RBAC checks
-- `services/`: consent logic, scope enforcement, summary generation, audit writes
-- `repositories/`: DB persistence layer
-- `schemas/`: Pydantic request/response models
-- `models/`: SQLAlchemy tables
-- `providers/`: Backboard, ElevenLabs, and storage abstractions
+  subgraph API[apps/api]
+    Routes[FastAPI Routes]
+    Services[Service Layer]
+    Repos[Repositories]
+    Models[SQLAlchemy Models]
+  end
 
-Implemented tables:
+  subgraph DB[PostgreSQL]
+    Tables[(users, roles, patients, guardians,\nhealth_records, access_requests, access_grants, audit_logs, summaries)]
+  end
 
-- `users`
-- `roles`
-- `patients`
-- `guardians`
-- `health_records`
-- `record_metadata`
-- `access_requests`
-- `access_grants`
-- `audit_logs`
-- `summaries`
+  subgraph External[External Services]
+    Auth0[Auth0 RBAC]
+    Backboard[Backboard API]
+    ElevenLabs[ElevenLabs TTS]
+    VultrObj[Vultr Object Storage]
+    Tail[Tailscale private network]
+  end
 
-## Local Setup
+  UX --> APIClient --> Routes --> Services --> Repos --> Models --> Tables
+  Services --> Backboard
+  Services --> ElevenLabs
+  Services --> VultrObj
+  UX --> Auth0
+  Routes --> Auth0
+  API --> Tail
+```
 
-### Option A: Docker Compose (recommended)
+## Backend Mode Decision (Important)
+
+The frontend supports two API contracts through `src/lib/api.js`.
+
+1. `fastapi` mode (recommended for this repo)
+   - Uses endpoints under `/api/v1`
+   - Uses SQLAlchemy-backed data in your FastAPI database
+2. `legacy` mode (partner Node backend)
+   - Uses `/api/...` endpoints on the partner server
+
+Set with:
+
+```env
+VITE_BACKEND_MODE=fastapi
+```
+
+## Expanded Demo Seed Data
+
+`python -m app.scripts.seed` now provisions multiple personas and records.
+
+### Users
+
+- doctor: `doctor@healthconnect.demo`
+- admin: `admin@healthconnect.demo`
+- guardian: `guardian@healthconnect.demo`
+- guardian2: `guardian2@healthconnect.demo`
+- patient personas:
+  - Priya Patient
+  - Daniel Okafor
+  - Leila Minhas
+  - Amina Yusuf
+
+### Patient Profiles (FastAPI patient IDs)
+
+- `1` -> Priya Patient (diabetes-style profile)
+- `2` -> Daniel Okafor (hypertension/renal profile)
+- `3` -> Leila Minhas (pediatric asthma profile)
+- `4` -> Amina Yusuf (migraine/neurology profile)
+
+### Records
+
+Each persona gets distinct records across multiple categories so AI output changes by selected patient context.
+
+## AI Agent Behavior (Mock Provider)
+
+Mock AI is now profile-aware by context and produces different output style/content for:
+
+- diabetes profile
+- hypertension/CKD profile
+- pediatric asthma profile
+- migraine profile
+- generic fallback
+
+Endpoints:
+
+- `POST /api/v1/summaries/patients/{patient_id}/patient-friendly`
+- `POST /api/v1/summaries/requests/{request_id}/doctor-brief`
+- `POST /api/v1/summaries/patients/{patient_id}/audit-digest`
+- `POST /api/v1/summaries/patients/{patient_id}/visit-recommendation`
+
+Disclaimer is always appended:
+
+`Assistive summary only. Not medical advice.`
+
+## TTS (ElevenLabs + Fallback)
+
+- If `TTS_PROVIDER=elevenlabs`, audio is generated from ElevenLabs.
+- If object storage upload fails, API falls back to local storage and still serves audio.
+
+Audio endpoints:
+
+- `POST /api/v1/summaries/{summary_id}/audio`
+- `GET /api/v1/summaries/{summary_id}/audio/stream`
+
+## Frontend Patient/Doctor Data Behavior
+
+`apps/web/src/store/patients.js` now includes richer patient personas and `backendPatientId` mapping.
+Selecting a different patient in the Doctor dashboard triggers AI generation with different patient context and backend ID.
+
+## Environment Files (Where To Put Keys)
+
+### 1) FastAPI local run
+
+Edit: `apps/api/.env`
+
+Use this file for:
+
+- `DATABASE_URL`
+- `DISABLE_AUTH`
+- `CORS_ORIGINS`
+- `AI_PROVIDER`, `BACKBOARD_API_KEY`
+- `TTS_PROVIDER`, `ELEVENLABS_*`
+- `STORAGE_PROVIDER`, `VULTR_*`
+
+### 2) Frontend local run
+
+Edit: `apps/web/.env`
+
+Use this file for:
+
+- `VITE_BACKEND_MODE`
+- `VITE_API_URL` / `VITE_FASTAPI_URL`
+- `VITE_AUTH0_DOMAIN`
+- `VITE_AUTH0_CLIENT_ID`
+- `VITE_AUTH0_AUDIENCE` (if used)
+- `VITE_AUTH0_ROLE_NAMESPACE`
+
+### 3) Templates only
+
+- `.env.example`
+- `infra/env/*.env.example`
+
+These are reference templates, not active runtime files.
+
+## Recommended Local Run (Manual)
+
+### Terminal A - API
+
+```powershell
+cd C:\Users\Sawaa\Documents\HealthConnect\HealthConnect\apps\api
+C:\Users\Sawaa\Documents\HealthConnect\HealthConnect\.venv\Scripts\Activate.ps1
+python -m app.scripts.seed
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8010
+```
+
+### Terminal B - Web
+
+```powershell
+cd C:\Users\Sawaa\Documents\HealthConnect\HealthConnect
+npm --prefix apps/web install
+npm --prefix apps/web run dev
+```
+
+### URLs
+
+- Web: `http://localhost:3000`
+- API health: `http://localhost:8010/api/v1/health`
+- API docs: `http://localhost:8010/docs`
+
+## Docker Compose Option
 
 ```bash
 docker compose -f infra/docker-compose.yml up --build
 ```
 
-Services:
+If Docker is not installed locally, use manual run above.
 
-- Web: `http://localhost:3000`
-- API: `http://localhost:8000/api/v1`
-- PostgreSQL: `localhost:5432`
+## Auth0 Checklist
 
-### Option B: Run manually
+For the exact frontend URL(s), configure all three fields in Auth0 app settings:
 
-1. Install root Node dependencies (shared package resolution):
+- Allowed Callback URLs
+- Allowed Logout URLs
+- Allowed Web Origins
 
-```bash
-npm install
-```
+For local dev with Vite on 3000, include:
 
-2. Install web app dependencies:
+- `http://localhost:3000`
+- `http://127.0.0.1:3000`
 
-```bash
-npm install --prefix apps/web
-```
+If using Tailscale/Vultr demo URL, add those exact origins too.
 
-3. Install Python dependencies:
+## Vultr + Tailscale + PostgreSQL Notes
 
-```bash
-pip install -r apps/api/requirements.txt
-```
-
-4. Seed demo data:
-
-```bash
-python -m app.scripts.seed
-# run from apps/api
-```
-
-5. Start API:
-
-```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-# run from apps/api
-```
-
-6. Start web:
-
-```bash
-npm --prefix apps/web run dev
-```
-
-## Seed Data Included
-
-Script: `apps/api/app/scripts/seed.py`
-
-Users:
-
-- 1 patient
-- 1 guardian
-- 1 doctor
-- 1 admin
-
-Records:
-
-- allergy record
-- medication list
-- blood test
-- referral note
+- Keep database private on tailnet when possible.
+- If connecting over Tailscale IP, server `pg_hba.conf` must allow your client tailnet IP and DB user.
+- Use a separate database for this app (`healthconnect_fastapi`) to avoid schema collisions.
 
 ## Testing
 
-Backend tests in `apps/api/tests` include:
+Backend tests:
+
+```bash
+pytest apps/api/tests
+```
+
+Current suite covers:
 
 - access request creation
 - consent approval
 - scope enforcement
 - access expiration logic
 
-Run:
+Frontend checks:
 
 ```bash
-pytest apps/api/tests
+npm --prefix apps/web run lint
+npm --prefix apps/web run build
 ```
 
-## Environment Variables
+## Demo Script (Hackathon)
 
-Templates:
+1. Doctor logs in and selects a patient persona.
+2. Doctor submits access request with scoped categories.
+3. Patient/guardian approves request.
+4. Doctor generates:
+   - doctor brief
+   - continuity-style summary
+   - visit recommendation
+5. Doctor edits AI note and saves it.
+6. Clicks "Speak Note" for TTS playback.
+7. Patient generates patient-friendly explanation and audit digest.
+8. Patient clicks "Speak" for summary audio.
+9. Admin/audit view demonstrates traceability.
 
-- `infra/env/api.env.example`
-- `infra/env/web.env.example`
-- `infra/env/db.env.example`
-- `.env.example`
+## Troubleshooting
 
-Key groups:
-
-- Auth0 (web): `VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID`, `VITE_AUTH0_AUDIENCE`, `VITE_AUTH0_ROLE_NAMESPACE`
-- Web backend routing: `VITE_BACKEND_MODE`, `VITE_API_URL`, `VITE_FASTAPI_URL`, `VITE_LEGACY_API_URL`
-- Optional admin UI toggle: `VITE_ENABLE_ADMIN` (`false` by default for demo teams without admin flow)
-- Legacy partner mapping (optional): `VITE_LEGACY_PATIENT_ID`, `VITE_LEGACY_DOCTOR_ID`
-- FastAPI demo mapping: `VITE_DEMO_PATIENT_ID`, `VITE_DEV_PATIENT_USER_ID`, `VITE_DEV_GUARDIAN_USER_ID`, `VITE_DEV_DOCTOR_USER_ID`, `VITE_DEV_ADMIN_USER_ID`
-- Backboard: `AI_PROVIDER`, `BACKBOARD_BASE_URL`, `BACKBOARD_API_KEY`
-- ElevenLabs: `TTS_PROVIDER`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`
-- Vultr Storage: `STORAGE_PROVIDER`, `VULTR_OBJECT_STORAGE_*`, `VULTR_BUCKET_NAME`, credentials
-- DB: `DATABASE_URL`
-- Tailscale: `TAILSCALE_AUTH_KEY` (deployment-level usage)
-
-## Auth + Network Checklist
-
-Before demo day, verify all of these once:
-
-1. Auth0 app URLs
-   - Allowed Callback URLs includes exact frontend URL(s): `http://localhost:3000`, `http://127.0.0.1:3000`, and any Tailscale/Vultr demo URL.
-   - Allowed Logout URLs includes the same origins.
-   - Allowed Web Origins includes the same origins.
-2. Frontend URL consistency
-   - Dev server runs on one fixed port (`3000`) using `vite --strictPort`.
-   - Do not use mixed ports (`3000` vs `3001`) for the same Auth0 app.
-3. API CORS
-   - FastAPI `CORS_ORIGINS` includes your frontend origin(s).
-   - Partner Node backend allows CORS from your frontend origin(s).
-4. Private networking
-   - Tailscale is connected on your laptop and server.
-   - Database host is reachable over tailnet before starting API.
-
-## Integration Points
-
-### Auth0 + RBAC
-
-- API auth dependency placeholder: `apps/api/app/api/deps.py`
-- Replace header-based dev identity with JWT verification middleware.
-- Enforce role claims for `patient`, `guardian`, `doctor`, `admin`.
-
-### Vultr Object Storage
-
-- Storage abstraction: `apps/api/app/providers/storage_provider.py`
-- Use `VultrObjectStorageProvider` in production.
-- Encryption calls are currently placeholders (`_encrypt_placeholder`, `_decrypt_placeholder`).
-
-### Tailscale Networking
-
-- Model documented in `infra/deployment/README.md`.
-- Keep API and internal services on private tailnet.
-- Optionally expose one demo endpoint via Tailscale Funnel.
-
-### Backboard API
-
-- Provider: `apps/api/app/providers/backboard_provider.py`
-- Service usage: `apps/api/app/services/summary_service.py`
-- Switch provider by setting `AI_PROVIDER=backboard`.
-- Trigger endpoints (FastAPI mode):
-  - `POST /api/v1/summaries/patients/{patient_id}/patient-friendly`
-  - `POST /api/v1/summaries/requests/{request_id}/doctor-brief`
-  - `POST /api/v1/summaries/patients/{patient_id}/audit-digest`
-
-### ElevenLabs API
-
-- Provider: `apps/api/app/providers/elevenlabs_provider.py`
-- Service usage: `apps/api/app/services/summary_service.py`
-- Switch provider by setting `TTS_PROVIDER=elevenlabs`.
+- `Callback URL mismatch`:
+  - Auth0 callback URL does not exactly match frontend origin/port.
+- `Not Found` on summary routes:
+  - Frontend may be pointing to wrong API port/version.
+- DB connection timeout:
+  - Tailscale disconnected or DB host/user/pg_hba not configured.
+- `Port 3000 already in use`:
+  - Stop previous Vite process or choose a free port.
+- Audio generation errors:
+  - Check `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, and provider selection.
 
 ## Roadmap
 
-1. Replace startup `create_all` with Alembic migrations.
-2. Add Auth0 JWT verification and claim-based authorization policies.
-3. Add async job workers for Backboard and ElevenLabs processing.
-4. Add signed URL streaming and secure encryption key management.
-5. Implement full emergency break-glass policy and mandatory post-incident review.
-6. Add accessibility enhancements, localization, and patient consent history diffing.
-# HealthConnect
-test
-test 2 
+1. Add Alembic migrations and remove startup `create_all`.
+2. Enforce Auth0 JWT verification in API (production path).
+3. Add async background workers for AI/TTS jobs.
+4. Add signed URL flow and production encryption key management.
+5. Expand break-glass policy and post-incident review workflow.
+6. Add stronger analytics for consent history and patient accessibility metrics.
+
+
