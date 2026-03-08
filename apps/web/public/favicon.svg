@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 340">
+  <rect width="340" height="340" rx="68" fill="#011a12" />
+  <g>
+    <line x1="170" y1="58" x2="170" y2="300" stroke="#ffffff" stroke-width="6" stroke-linecap="round" />
+    <circle cx="170" cy="44" r="14" fill="#ffffff" />
+    <circle cx="170" cy="44" r="8.5" fill="#34d399" />
+    <circle cx="166" cy="40" r="2.5" fill="rgba(255,255,255,0.65)" />
+  </g>
+  <g>
+    <path d="M 170,66 C 148,50 118,32 84,36 C 54,40 22,56 14,74" fill="none" stroke="rgba(186,255,230,0.5)" stroke-width="3.5" stroke-linecap="round" />
+    <path d="M 170,72 C 150,58 124,44 94,48 C 68,52 40,64 28,80" fill="none" stroke="rgba(186,255,230,0.32)" stroke-width="2.8" stroke-linecap="round" />
+    <path d="M 170,66 C 192,50 222,32 256,36 C 286,40 318,56 326,74" fill="none" stroke="rgba(186,255,230,0.5)" stroke-width="3.5" stroke-linecap="round" />
+    <path d="M 170,72 C 190,58 216,44 246,48 C 272,52 300,64 312,80" fill="none" stroke="rgba(186,255,230,0.32)" stroke-width="2.8" stroke-linecap="round" />
+    <path d="M 170,62 C 148,44 116,22 80,24 C 48,26 14,46 8,68 C 8,84 14,100 22,96 C 28,92 36,70 44,70 C 44,88 50,104 58,100 C 64,96 74,71 82,71 C 82,89 90,104 98,100 C 104,96 114,73 122,73 C 122,89 130,101 138,97 C 144,93 152,76 160,75 C 162,82 165,79 170,78" fill="#ffffff" opacity="0.96" />
+    <path d="M 170,62 C 192,44 224,22 260,24 C 292,26 326,46 332,68 C 332,84 326,100 318,96 C 312,92 304,70 296,70 C 296,88 290,104 282,100 C 276,96 266,71 258,71 C 258,89 250,104 242,100 C 236,96 226,73 218,73 C 218,89 210,101 202,97 C 196,93 188,76 180,75 C 178,82 175,79 170,78" fill="#ffffff" opacity="0.96" />
+  </g>
+  <g>
+    <path d="M 170,300 Q 194,285 170,269 Q 141,253 170,237 Q 204,217 170,197 Q 132,175 170,153 Q 216,127 170,103 Q 130,83 138,73" fill="none" stroke="#6ee7b7" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" />
+    <ellipse cx="135" cy="69" rx="10" ry="8" fill="#6ee7b7" transform="rotate(-35 135 69)" />
+    <circle cx="131" cy="65" r="2.5" fill="#011a12" />
+    <path d="M 127,72 L 120,76 M 127,72 L 122,79" fill="none" stroke="#f87171" stroke-width="2.2" stroke-linecap="round" />
+  </g>
+  <g>
+    <path d="M 170,300 Q 146,285 170,269 Q 199,253 170,237 Q 136,217 170,197 Q 208,175 170,153 Q 124,127 170,103 Q 210,83 202,73" fill="none" stroke="#a7f3d0" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" />
+    <ellipse cx="205" cy="69" rx="10" ry="8" fill="#a7f3d0" transform="rotate(35 205 69)" />
+    <circle cx="209" cy="65" r="2.5" fill="#011a12" />
+    <path d="M 213,72 L 220,76 M 213,72 L 218,79" fill="none" stroke="#f87171" stroke-width="2.2" stroke-linecap="round" />
+  </g>
+</svg>
