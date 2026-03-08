@@ -1,5 +1,7 @@
 import { useAuth0 } from '@auth0/auth0-react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { getPatient } from '../api'
 
 // Mock patient data — in production, fetched from API by patientId
 const mockPatient = {
@@ -31,9 +33,9 @@ const mockPatient = {
 
 // Check if the currently logged-in user is an authorized emergency contact for this patient
 function isAuthorizedContact(userEmail, patient) {
-    if (!userEmail) return false
+    if (!userEmail || !patient?.emergencyContacts) return false
     return patient.emergencyContacts.some(
-        c => c.email.toLowerCase() === userEmail.toLowerCase()
+        c => c.email?.toLowerCase() === userEmail.toLowerCase()
     )
 }
 
@@ -63,11 +65,42 @@ export default function EmergencyCard() {
     const navigate = useNavigate()
     const { isAuthenticated, isLoading, logout, user } = useAuth0()
 
-    const patient = mockPatient // in production: fetch by patientId
+    const [patient, setPatient] = useState(null)
+    const [patientLoading, setPatientLoading] = useState(true)
+    const [patientError, setPatientError] = useState('')
+
+    useEffect(() => {
+        if (!patientId) return
+        setPatientLoading(true)
+        getPatient(patientId)
+            .then(data => {
+                if (!data || data.error) {
+                    setPatientError('No patient found with this ID, or the emergency link has expired.')
+                } else {
+                    setPatient(data)
+                }
+            })
+            .catch(() => setPatientError('Failed to load patient data. Please try again.'))
+            .finally(() => setPatientLoading(false))
+    }, [patientId])
+
     const authorized = isAuthorizedContact(user?.email, patient)
 
     // ---- LOADING ----
-    if (isLoading) return <Spinner />
+    if (isLoading || patientLoading) return <Spinner />
+
+    // ---- PATIENT LOAD ERROR ----
+    if (patientError) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+                <div className="max-w-md w-full bg-red-50 border border-red-200 rounded-2xl p-8 text-center">
+                    <p className="text-4xl mb-4">🚨</p>
+                    <h2 className="text-xl font-bold text-red-900 mb-2">Access Error</h2>
+                    <p className="text-red-700 text-sm">{patientError}</p>
+                </div>
+            </div>
+        )
+    }
 
     // ---- NOT LOGGED IN: redirect through the normal patient login ----
     if (!isAuthenticated) {

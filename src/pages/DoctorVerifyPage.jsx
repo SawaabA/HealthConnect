@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth0 } from '@auth0/auth0-react'
+import { createDoctor } from '../api'
 
 const CREDENTIAL_TYPES = [
     { value: '', label: 'Select credential type...' },
@@ -32,19 +33,34 @@ export default function DoctorVerifyPage() {
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
 
-    function handleSubmit(e) {
+    async function handleSubmit(e) {
         e.preventDefault()
         const err = validate({ type, number, hospital, badge })
         if (err) { setError(err); return }
 
         setLoading(true)
         setError('')
-        // Simulate a short verification delay, then proceed
-        setTimeout(() => {
+
+        try {
+            // Build payload based on credential type
+            const payload = {
+                auth0_id: user.sub,
+                full_name: user.name || user.email,
+                ...(type === 'cpso' && { cpso_number: number }),
+                ...(type === 'minc' && { minc_number: number }),
+                ...(type === 'hospital' && { hospital_name: hospital, hospital_id: badge }),
+            }
+
+            await createDoctor(payload)
+
             sessionStorage.setItem('hc_doctor_verified', '1')
             sessionStorage.setItem('hc_credential_type', type)
             navigate('/doctor', { replace: true })
-        }, 900)
+        } catch (err) {
+            console.error('createDoctor failed:', err)
+            setError('Could not register your credentials. Please check the information and try again.')
+            setLoading(false)
+        }
     }
 
     // Change type → reset number fields

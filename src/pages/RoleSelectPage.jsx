@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
 import { useNavigate } from 'react-router-dom'
+import { createPatient } from '../api'
 
 const T = { glow: 900, unravel: 1900, fade: 3700, reveal: 4200 }
 
@@ -156,8 +157,21 @@ export default function RoleSelectPage() {
 
     function handleRoleSelect(role) {
         sessionStorage.setItem('hc_intended_role', role)
-        loginWithRedirect({ authorizationParams: { redirect_uri: window.location.origin } })
+        loginWithRedirect({
+            authorizationParams: { redirect_uri: window.location.origin },
+            appState: { role }   // passed through so the callback can use it
+        })
     }
+
+    // After Auth0 redirects back, if user is a patient register them in the DB.
+    // This runs once when isAuthenticated becomes true on this page.
+    useEffect(() => {
+        const intendedRole = sessionStorage.getItem('hc_intended_role')
+        if (isAuthenticated && user && intendedRole === 'patient') {
+            createPatient({ auth0_id: user.sub, full_name: user.name || user.email })
+                .catch(err => console.warn('createPatient error (may already exist):', err))
+        }
+    }, [isAuthenticated, user])
 
     const isDark = phase !== 'reveal'
     const isReveal = phase === 'reveal'
