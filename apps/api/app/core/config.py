@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     api_v1_prefix: str = "/api/v1"
     sql_echo: bool = False
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     database_url: str = "sqlite:///./healthconnect.db"
     disable_auth: bool = True

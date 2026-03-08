@@ -53,10 +53,12 @@ services:
       dockerfile: apps/web/Dockerfile
     container_name: healthconnect-web
     environment:
-      NEXT_PUBLIC_API_BASE_URL: http://api:8000/api/v1
-      NEXT_PUBLIC_AUTH0_DOMAIN: ${NEXT_PUBLIC_AUTH0_DOMAIN:-}
-      NEXT_PUBLIC_AUTH0_CLIENT_ID: ${NEXT_PUBLIC_AUTH0_CLIENT_ID:-}
-      NEXT_PUBLIC_AUTH0_AUDIENCE: ${NEXT_PUBLIC_AUTH0_AUDIENCE:-}
+      VITE_API_URL: http://api:8000/api/v1
+      VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN:-}
+      VITE_AUTH0_CLIENT_ID: ${VITE_AUTH0_CLIENT_ID:-}
+      VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE:-}
+      VITE_AUTH0_SCOPE: ${VITE_AUTH0_SCOPE:-openid profile email}
+      VITE_AUTH0_ROLE_NAMESPACE: ${VITE_AUTH0_ROLE_NAMESPACE:-https://healthconnect.app}
     ports:
       - "3000:3000"
     volumes:

@@ -34,7 +34,7 @@ Supported record categories:
 
 ```mermaid
 flowchart LR
-  subgraph Frontend["apps/web (Next.js 14 + Tailwind + shadcn structure)"]
+  subgraph Frontend["apps/web (Vite React + Tailwind + Auth0)"]
     UI[Dashboards + Record Viewer]
   end
 
@@ -67,7 +67,7 @@ flowchart LR
 
 ## Technology Stack
 
-- Frontend: Next.js 14 App Router, TypeScript, TailwindCSS, shadcn/ui-style component layout
+- Frontend: Vite + React (JSX), TailwindCSS, Auth0 React SDK
 - Backend: FastAPI, Pydantic, SQLAlchemy, PostgreSQL
 - Infra: Docker, Docker Compose, Vultr deployment placeholders, Vultr Object Storage integration points
 - Networking: Tailscale private-network model with optional Tailscale Funnel demo exposure
@@ -79,7 +79,7 @@ flowchart LR
 
 ```text
 apps/
-  web/                  # Next.js app (landing, dashboards, detail pages)
+  web/                  # Vite React app (partner UX + FastAPI integration)
   api/                  # FastAPI app (routes/services/repositories/providers)
 
 packages/
@@ -215,7 +215,9 @@ Templates:
 
 Key groups:
 
-- Auth0: `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, `AUTH0_ISSUER`, `NEXT_PUBLIC_AUTH0_*`
+- Auth0 (web): `VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID`, `VITE_AUTH0_AUDIENCE`, `VITE_AUTH0_ROLE_NAMESPACE`
+- Web API routing: `VITE_API_URL`
+- Dev user mapping (current backend auth bridge): `VITE_DEV_PATIENT_USER_ID`, `VITE_DEV_GUARDIAN_USER_ID`, `VITE_DEV_DOCTOR_USER_ID`, `VITE_DEV_ADMIN_USER_ID`
 - Backboard: `AI_PROVIDER`, `BACKBOARD_BASE_URL`, `BACKBOARD_API_KEY`
 - ElevenLabs: `TTS_PROVIDER`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`
 - Vultr Storage: `STORAGE_PROVIDER`, `VULTR_OBJECT_STORAGE_*`, `VULTR_BUCKET_NAME`, credentials
