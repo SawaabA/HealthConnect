@@ -29,6 +29,7 @@ class SummaryType(str, Enum):
     PATIENT_EXPLANATION = "patient_explanation"
     DOCTOR_BRIEF = "doctor_brief"
     AUDIT_DIGEST = "audit_digest"
+    VISIT_RECOMMENDATION = "visit_recommendation"
 
 
 class AuditAction(str, Enum):
@@ -39,5 +40,6 @@ class AuditAction(str, Enum):
     ACCESS_EXPIRED = "access_expired"
     RECORD_VIEWED = "record_viewed"
     SUMMARY_GENERATED = "summary_generated"
+    SUMMARY_EDITED = "summary_edited"
     AUDIO_GENERATED = "audio_generated"
     BREAK_GLASS_REQUESTED = "break_glass_requested"

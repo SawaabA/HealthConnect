@@ -103,6 +103,84 @@ class SummaryService:
         self.db.commit()
         return summary
 
+    def generate_audit_digest(
+        self,
+        *,
+        patient_id: int,
+        audit_events: list[dict],
+        access_request_id: int | None = None,
+    ):
+        try:
+            generated = self.summary_provider.generate_audit_summary(audit_events=audit_events)
+        except Exception:
+            # Keep demo flow alive if external provider payload/endpoint changes.
+            generated = MockProvider().generate_audit_summary(audit_events=audit_events)
+
+        if not generated.strip():
+            generated = MockProvider().generate_audit_summary(audit_events=audit_events)
+        content = self._with_disclaimer(generated)
+        summary = self.summaries.create(
+            patient_id=patient_id,
+            summary_type=SummaryType.AUDIT_DIGEST.value,
+            content=content,
+            disclaimer=settings.summary_disclaimer,
+            access_request_id=access_request_id,
+        )
+        self.audit.log(
+            actor_user_id=None,
+            action=AuditAction.SUMMARY_GENERATED.value,
+            access_request_id=access_request_id,
+            details={"summary_id": summary.id, "summary_type": SummaryType.AUDIT_DIGEST.value},
+        )
+        self.db.commit()
+        return summary
+
+    def generate_visit_recommendation(
+        self,
+        *,
+        patient_id: int,
+        patient_context: str,
+        last_physical_date: str | None = None,
+        current_symptoms: list[str] | None = None,
+        access_request_id: int | None = None,
+    ):
+        try:
+            generated = self.summary_provider.generate_visit_recommendation(
+                patient_context=patient_context,
+                last_physical_date=last_physical_date,
+                current_symptoms=current_symptoms or [],
+            )
+        except Exception:
+            generated = MockProvider().generate_visit_recommendation(
+                patient_context=patient_context,
+                last_physical_date=last_physical_date,
+                current_symptoms=current_symptoms or [],
+            )
+
+        if not generated.strip():
+            generated = MockProvider().generate_visit_recommendation(
+                patient_context=patient_context,
+                last_physical_date=last_physical_date,
+                current_symptoms=current_symptoms or [],
+            )
+
+        content = self._with_disclaimer(generated)
+        summary = self.summaries.create(
+            patient_id=patient_id,
+            summary_type=SummaryType.VISIT_RECOMMENDATION.value,
+            content=content,
+            disclaimer=settings.summary_disclaimer,
+            access_request_id=access_request_id,
+        )
+        self.audit.log(
+            actor_user_id=None,
+            action=AuditAction.SUMMARY_GENERATED.value,
+            access_request_id=access_request_id,
+            details={"summary_id": summary.id, "summary_type": SummaryType.VISIT_RECOMMENDATION.value},
+        )
+        self.db.commit()
+        return summary
+
     def synthesize_audio(self, *, summary_id: int, voice_id: str | None = None):
         summary = self.summaries.get_by_id(summary_id)
         if summary is None:
@@ -110,8 +188,14 @@ class SummaryService:
 
         audio = self.tts_provider.synthesize(text=summary.content, voice_id=voice_id)
         storage_key = f"summaries/{summary.id}.mp3"
-        self.storage_provider.upload_bytes(key=storage_key, content=audio, content_type="audio/mpeg")
-        summary.audio_storage_key = storage_key
+        try:
+            self.storage_provider.upload_bytes(key=storage_key, content=audio, content_type="audio/mpeg")
+            summary.audio_storage_key = storage_key
+        except Exception:
+            # Demo fallback: if remote object storage is misconfigured, keep audio usable locally.
+            local_storage = LocalStorageProvider()
+            local_storage.upload_bytes(key=storage_key, content=audio, content_type="audio/mpeg")
+            summary.audio_storage_key = f"local:{storage_key}"
         self.summaries.save(summary)
 
         self.audit.log(
@@ -119,6 +203,35 @@ class SummaryService:
             action=AuditAction.AUDIO_GENERATED.value,
             access_request_id=summary.access_request_id,
             details={"summary_id": summary.id, "audio_storage_key": storage_key},
+        )
+        self.db.commit()
+        return summary
+
+    def get_audio_bytes(self, *, summary_id: int) -> bytes:
+        summary = self.summaries.get_by_id(summary_id)
+        if summary is None:
+            raise ValueError("Summary not found")
+        if not summary.audio_storage_key:
+            raise ValueError("Audio has not been generated for this summary")
+        if summary.audio_storage_key.startswith("local:"):
+            key = summary.audio_storage_key.removeprefix("local:")
+            return LocalStorageProvider().download_bytes(key=key)
+        return self.storage_provider.download_bytes(key=summary.audio_storage_key)
+
+    def update_summary_content(self, *, summary_id: int, content: str):
+        summary = self.summaries.get_by_id(summary_id)
+        if summary is None:
+            raise ValueError("Summary not found")
+        if not content or not content.strip():
+            raise ValueError("Summary content cannot be empty")
+
+        summary.content = self._with_disclaimer(content.strip())
+        self.summaries.save(summary)
+        self.audit.log(
+            actor_user_id=None,
+            action=AuditAction.SUMMARY_EDITED.value,
+            access_request_id=summary.access_request_id,
+            details={"summary_id": summary.id},
         )
         self.db.commit()
         return summary

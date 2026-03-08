@@ -1,39 +1,83 @@
-import { useAuth0 } from '@auth0/auth0-react'
+﻿import { useAuth0 } from '@auth0/auth0-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion'
-import { Bell, HeartPulse, Activity, FileText, Calendar, Clock, AlertCircle, Share2, LogOut, CheckCircle, XCircle, Shield, X, UserCheck, Eye, Paperclip, MessageSquare } from 'lucide-react'
+import { Bell, HeartPulse, Activity, FileText, Calendar, Clock, AlertCircle, Share2, Sparkles, LogOut, CheckCircle, XCircle, Shield, X, UserCheck, Eye, Paperclip, MessageSquare, Volume2 } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import Chatbot from '../components/Chatbot'
 import Logo from '../components/Logo'
 import { getPatients } from '../store/patients'
-import { resolveRoleAndUserId } from '../lib/auth'
+import { getAvatarInitial, getDisplayName, resolveRoleAndUserId } from '../lib/auth'
 import {
     approveAccessRequest,
     denyAccessRequest,
+    generateAuditDigest,
+    generatePatientSummary,
+    generateSummaryAudio,
+    fetchSummaryAudioBlob,
     listPatientAccessRequests,
     listPatientRecords,
     prettifyCategory,
 } from '../lib/api'
 
-const mockRecords = [
-    { id: 1, date: '2025-11-14', type: 'Lab Results', doctor: 'Dr. Amir Patel', status: 'Reviewed', summary: 'HbA1c: 6.8% — within target range.' },
-    { id: 2, date: '2025-10-02', type: 'Prescription', doctor: 'Dr. Amir Patel', status: 'Active', summary: 'Metformin 500mg twice daily.' },
-    { id: 3, date: '2025-08-19', type: 'Imaging', doctor: 'Dr. Susan Kwan', status: 'Reviewed', summary: 'Chest X-ray — No abnormalities detected.' },
-    { id: 4, date: '2025-06-05', type: 'Consultation', doctor: 'Dr. James Wright', status: 'Complete', summary: 'Annual physical — all vitals normal.' },
-]
+const mockRecordsByPatient = {
+    1: [
+        { id: 101, date: '2026-02-14', type: 'Labs', doctor: 'LifeLabs', status: 'Reviewed', summary: 'HbA1c 6.8%. Glucose trend stable.' },
+        { id: 102, date: '2026-01-03', type: 'Medications', doctor: 'Dr. Dana Doctor', status: 'Active', summary: 'Insulin regimen unchanged. Continue current dosage.' },
+        { id: 103, date: '2025-12-11', type: 'Imaging Reports', doctor: 'Toronto Imaging', status: 'Reviewed', summary: 'No acute findings on chest imaging.' },
+    ],
+    2: [
+        { id: 201, date: '2026-01-30', type: 'Labs', doctor: 'LifeLabs', status: 'Reviewed', summary: 'Creatinine mildly elevated. Repeat in 6 weeks.' },
+        { id: 202, date: '2026-01-18', type: 'Medications', doctor: 'Dr. Dana Doctor', status: 'Active', summary: 'Amlodipine increased to 10mg daily.' },
+        { id: 203, date: '2025-12-29', type: 'Referral Notes', doctor: 'Renal Clinic', status: 'Complete', summary: 'Nephrology intake accepted for CKD follow-up.' },
+    ],
+    3: [
+        { id: 301, date: '2026-03-01', type: 'Emergency Summary', doctor: 'Pediatric Centre', status: 'Reviewed', summary: 'Asthma action plan updated for school nurse.' },
+        { id: 302, date: '2026-02-07', type: 'Medications', doctor: 'Dr. Dana Doctor', status: 'Active', summary: 'Rescue inhaler refill approved.' },
+        { id: 303, date: '2025-12-20', type: 'Labs', doctor: 'Kids Pulmonary Lab', status: 'Complete', summary: 'Spirometry shows mild obstruction pattern.' },
+    ],
+    4: [
+        { id: 401, date: '2026-02-20', type: 'Referral Notes', doctor: 'Neurology Intake', status: 'Pending', summary: 'Migraine referral triaged, specialist visit pending.' },
+        { id: 402, date: '2026-02-01', type: 'Imaging Reports', doctor: 'Toronto Neuro Imaging', status: 'Reviewed', summary: 'MRI normal. No intracranial red flags.' },
+        { id: 403, date: '2026-01-09', type: 'Medications', doctor: 'Dr. Dana Doctor', status: 'Active', summary: 'Acute migraine rescue plan reviewed.' },
+    ],
+}
 
-const mockRequests = [
-    { id: 1, doctor: 'Dr. Emily Sharma', specialty: 'Endocrinology', hospital: 'Toronto General', date: '2026-03-06', reason: 'Diabetes management follow-up' },
-    { id: 2, doctor: 'Dr. Marcus Lee', specialty: 'Cardiology', hospital: 'St. Michael\'s Hospital', date: '2026-03-07', reason: 'Cardiac risk assessment' },
-]
+const mockRequestsByPatient = {
+    1: [
+        { id: 1, doctor: 'Dr. Emily Sharma', specialty: 'Endocrinology', hospital: 'Toronto General', date: '2026-03-06', reason: 'Diabetes management follow-up' },
+    ],
+    2: [
+        { id: 2, doctor: 'Dr. Marcus Lee', specialty: 'Nephrology', hospital: 'St. Michael\'s Hospital', date: '2026-03-07', reason: 'Kidney function trend review' },
+    ],
+    3: [
+        { id: 3, doctor: 'Dr. Olivia Park', specialty: 'Pediatrics', hospital: 'SickKids', date: '2026-03-08', reason: 'Asthma school plan update' },
+    ],
+    4: [
+        { id: 4, doctor: 'Dr. Nina Shah', specialty: 'Neurology', hospital: 'Mount Sinai', date: '2026-03-05', reason: 'Migraine escalation check' },
+    ],
+}
 
-const mockAuditLog = [
-    { id: 1, action: 'Record Accessed', actor: 'Dr. Amir Patel', time: '2026-03-07 09:14 AM' },
-    { id: 2, action: 'Access Granted', actor: 'You', time: '2026-03-06 03:22 PM' },
-    { id: 3, action: 'Login', actor: 'You', time: '2026-03-06 03:20 PM' },
-    { id: 4, action: 'Record Accessed', actor: 'Dr. Susan Kwan', time: '2026-03-05 11:45 AM' },
-]
+const mockAuditLogByPatient = {
+    1: [
+        { id: 1, action: 'Record Accessed', actor: 'Dr. Dana Doctor', time: '2026-03-07 09:14 AM' },
+        { id: 2, action: 'Access Granted', actor: 'You', time: '2026-03-06 03:22 PM' },
+        { id: 3, action: 'Login', actor: 'You', time: '2026-03-06 03:20 PM' },
+    ],
+    2: [
+        { id: 4, action: 'Record Accessed', actor: 'Dr. Dana Doctor', time: '2026-03-06 10:45 AM' },
+        { id: 5, action: 'Access Approved', actor: 'Guardian', time: '2026-03-05 04:05 PM' },
+        { id: 6, action: 'Grant Revoked', actor: 'Patient', time: '2026-03-04 06:22 PM' },
+    ],
+    3: [
+        { id: 7, action: 'Record Accessed', actor: 'Dr. Olivia Park', time: '2026-03-08 11:05 AM' },
+        { id: 8, action: 'Guardian Approval', actor: 'Maya Guardian', time: '2026-03-08 10:58 AM' },
+    ],
+    4: [
+        { id: 9, action: 'Record Accessed', actor: 'Dr. Nina Shah', time: '2026-03-05 02:35 PM' },
+        { id: 10, action: 'Summary Generated', actor: 'System', time: '2026-03-05 02:36 PM' },
+    ],
+}
 
 const mockDependents = [
     { id: 1, name: 'Aisha Minhas', age: 8, relationship: 'Child (Legal Guardian)', condition: 'Asthma', mrn: 'MRN-2024-1201' },
@@ -74,9 +118,11 @@ function mapRecordToUi(record) {
         id: record.id,
         date: new Date(record.uploaded_at).toLocaleDateString('en-CA'),
         type: prettifyCategory(record.category),
+        category: record.category,
         doctor: record.source_provider || 'Authorized Provider',
         status: 'Reviewed',
         summary: record.title,
+        contextText: `${prettifyCategory(record.category)}: ${record.title}`,
     }
 }
 
@@ -96,15 +142,42 @@ function mapRequestToUi(request) {
 
 export default function PatientDashboard({ roleOverride = 'patient' }) {
     const { user, logout, getAccessTokenSilently } = useAuth0()
-    const [requests, setRequests] = useState(mockRequests)
-    const [records, setRecords] = useState(mockRecords)
+    const seededPatientId = Number.parseInt(import.meta.env.VITE_DEMO_PATIENT_ID || '1', 10)
+    const fallbackRecords = useMemo(
+        () => mockRecordsByPatient[seededPatientId] || mockRecordsByPatient[1] || [],
+        [seededPatientId],
+    )
+    const fallbackRequests = useMemo(
+        () => mockRequestsByPatient[seededPatientId] || mockRequestsByPatient[1] || [],
+        [seededPatientId],
+    )
+    const fallbackAuditLog = useMemo(
+        () => mockAuditLogByPatient[seededPatientId] || mockAuditLogByPatient[1] || [],
+        [seededPatientId],
+    )
+    const [requests, setRequests] = useState(fallbackRequests)
+    const [records, setRecords] = useState(fallbackRecords)
     const [showQR, setShowQR] = useState(false)
     const [toast, setToast] = useState(null)
     const [grantModal, setGrantModal] = useState({ isOpen: false, dependent: null })
     const [grantDoctor, setGrantDoctor] = useState('')
     const [viewingRecord, setViewingRecord] = useState(null) // holds a mockRecord entry
     const [loadError, setLoadError] = useState('')
+    const [aiSummaryByRecordId, setAiSummaryByRecordId] = useState({})
+    const [summaryMetaByRecordId, setSummaryMetaByRecordId] = useState({})
+    const [aiLoadingRecordId, setAiLoadingRecordId] = useState(null)
+    const [auditDigest, setAuditDigest] = useState('')
+    const [auditDigestSummaryId, setAuditDigestSummaryId] = useState(null)
+    const [auditDigestLoading, setAuditDigestLoading] = useState(false)
+    const [audioBusyKey, setAudioBusyKey] = useState('')
     const authContext = useMemo(() => resolveRoleAndUserId(user, roleOverride), [user, roleOverride])
+    const isGuardian = authContext.role === 'guardian'
+    const userRoleForGreeting = isGuardian ? 'guardian' : 'patient'
+    const portalDisplayName = useMemo(() => getDisplayName(user, userRoleForGreeting), [user, userRoleForGreeting])
+    const portalAvatarInitial = useMemo(() => getAvatarInitial(user, userRoleForGreeting), [user, userRoleForGreeting])
+    const profilePatient = getPatients().find(
+        (patient) => Number(patient.backendPatientId ?? patient.id) === seededPatientId,
+    ) || getPatients()[0] || null
 
     const resolveTokenIfConfigured = useCallback(async () => {
         if (!import.meta.env.VITE_AUTH0_AUDIENCE) return null
@@ -118,8 +191,8 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
             try {
                 const token = await resolveTokenIfConfigured()
                 const [recordsResponse, requestsResponse] = await Promise.all([
-                    listPatientRecords({ patientId: 1, userId: authContext.userId, token }),
-                    listPatientAccessRequests({ patientId: 1, userId: authContext.userId, token }),
+                    listPatientRecords({ patientId: seededPatientId, userId: authContext.userId, token }),
+                    listPatientAccessRequests({ patientId: seededPatientId, userId: authContext.userId, token }),
                 ])
 
                 if (!mounted) return
@@ -138,6 +211,8 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
                 setLoadError('')
             } catch (error) {
                 if (!mounted) return
+                setRecords(fallbackRecords)
+                setRequests(fallbackRequests)
                 setLoadError(error?.message || 'Live API unavailable. Showing demo data.')
             }
         }
@@ -147,7 +222,7 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
         return () => {
             mounted = false
         }
-    }, [authContext.userId, resolveTokenIfConfigured])
+    }, [authContext.userId, fallbackRecords, fallbackRequests, resolveTokenIfConfigured, seededPatientId])
 
     async function handleRequest(id, action) {
         const target = requests.find((request) => request.id === id)
@@ -186,6 +261,117 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
         }
     }
 
+    async function handleGenerateSummary(record) {
+        setAiLoadingRecordId(record.id)
+        try {
+            const token = await resolveTokenIfConfigured()
+            const summary = await generatePatientSummary({
+                patientId: seededPatientId,
+                patientContext: record.contextText || record.summary,
+                visitContext: `Record category: ${record.type}`,
+                patientName: portalDisplayName,
+                userId: authContext.userId,
+                token,
+            })
+
+            setAiSummaryByRecordId(prev => ({
+                ...prev,
+                [record.id]: summary.content,
+            }))
+            setSummaryMetaByRecordId(prev => ({
+                ...prev,
+                [record.id]: { summaryId: summary.id || null },
+            }))
+        } catch (error) {
+            setToast({
+                id: record.id,
+                action: 'denied',
+                message: error?.message || 'Could not generate patient summary',
+            })
+            setTimeout(() => setToast(null), 3000)
+        } finally {
+            setAiLoadingRecordId(null)
+        }
+    }
+
+    async function handleGenerateAuditDigest() {
+        setAuditDigestLoading(true)
+        try {
+            const token = await resolveTokenIfConfigured()
+            const digest = await generateAuditDigest({
+                patientId: seededPatientId,
+                auditEvents: fallbackAuditLog.map((entry) => ({
+                    action: entry.action,
+                    actor: entry.actor,
+                    created_at: entry.time,
+                })),
+                userId: authContext.userId,
+                token,
+            })
+            setAuditDigest(digest.content)
+            setAuditDigestSummaryId(digest.id || null)
+        } catch (error) {
+            setToast({
+                id: Date.now(),
+                action: 'denied',
+                message: error?.message || 'Could not generate audit digest',
+            })
+            setTimeout(() => setToast(null), 3000)
+        } finally {
+            setAuditDigestLoading(false)
+        }
+    }
+
+    function speakWithBrowser(text) {
+        if (!window.speechSynthesis) {
+            throw new Error('Browser speech synthesis is not available on this device.')
+        }
+        window.speechSynthesis.cancel()
+        const utterance = new window.SpeechSynthesisUtterance(text)
+        utterance.rate = 0.95
+        window.speechSynthesis.speak(utterance)
+    }
+
+    async function playSummaryAudio({ summaryId, fallbackText, busyKey }) {
+        if (!fallbackText) return
+        setAudioBusyKey(busyKey)
+        try {
+            const token = await resolveTokenIfConfigured()
+            if (summaryId) {
+                await generateSummaryAudio({
+                    summaryId,
+                    userId: authContext.userId,
+                    token,
+                })
+                const audioBlob = await fetchSummaryAudioBlob({
+                    summaryId,
+                    userId: authContext.userId,
+                    token,
+                })
+                const url = URL.createObjectURL(audioBlob)
+                const audio = new Audio(url)
+                await audio.play()
+                audio.onended = () => URL.revokeObjectURL(url)
+                return
+            }
+
+            speakWithBrowser(`Hi ${portalDisplayName}. ${fallbackText}`)
+        } catch (error) {
+            try {
+                speakWithBrowser(`Hi ${portalDisplayName}. ${fallbackText}`)
+            } catch {
+                setToast({
+                    id: Date.now(),
+                    action: 'denied',
+                    message: error?.message || 'Could not play summary audio',
+                })
+                setTimeout(() => setToast(null), 3000)
+            }
+        } finally {
+            setAudioBusyKey('')
+        }
+    }
+
     const containerVariants = {
         hidden: { opacity: 0 },
         show: {
@@ -200,7 +386,6 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
         hidden: { opacity: 0, y: 20 },
         show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
     };
-    const isGuardian = authContext.role === 'guardian'
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -216,11 +401,11 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
                     </div>
                     <div className="flex items-center gap-4">
                         <div className="text-right hidden sm:block">
-                            <p className="text-gray-900 text-sm font-medium">{user?.name || user?.email}</p>
+                            <p className="text-gray-900 text-sm font-medium">{portalDisplayName}</p>
                             <p className="text-gray-700 text-xs">{isGuardian ? 'Guardian' : 'Patient'}</p>
                         </div>
                         <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                            {(user?.name || user?.email || 'P')[0].toUpperCase()}
+                            {portalAvatarInitial}
                         </div>
                         <button
                             onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
@@ -238,7 +423,7 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
                         <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                            Good morning, {user?.given_name || 'there'} 👋
+                            Good morning, {portalDisplayName}
                         </h2>
                         <p className="text-gray-500 text-sm mt-1 flex items-center gap-1">
                             <Clock size={14} /> Last login: Today at 9:14 AM
@@ -276,9 +461,9 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
                             <div className="bg-blue-100 text-blue-600 p-3 rounded-lg"><Activity size={24} /></div>
                             <div>
                                 <p className="text-sm font-medium text-gray-500">Latest HbA1c</p>
-                                <p className="text-2xl font-bold text-gray-900">6.8%</p>
+                                <p className="text-2xl font-bold text-gray-900">{profilePatient?.vitals?.hba1c || 'Not set'}</p>
                                 <p className="text-xs text-green-600 font-medium flex items-center mt-1">
-                                    ↓ 0.1% from last month
+                                    {profilePatient?.vitals?.trendNote || 'Awaiting latest trend update'}
                                 </p>
                             </div>
                         </div>
@@ -286,16 +471,16 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
                             <div className="bg-purple-100 text-purple-600 p-3 rounded-lg"><HeartPulse size={24} /></div>
                             <div>
                                 <p className="text-sm font-medium text-gray-500">Blood Pressure</p>
-                                <p className="text-2xl font-bold text-gray-900">118/76</p>
-                                <p className="text-xs text-gray-400 font-medium mt-1">Recorded Oct 02, 2025</p>
+                                <p className="text-2xl font-bold text-gray-900">{profilePatient?.vitals?.bloodPressure || 'Not set'}</p>
+                                <p className="text-xs text-gray-400 font-medium mt-1">Last physical {profilePatient?.lastPhysicalDate || 'not recorded'}</p>
                             </div>
                         </div>
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex items-start gap-4">
                             <div className="bg-orange-100 text-orange-600 p-3 rounded-lg"><Calendar size={24} /></div>
                             <div>
-                                <p className="text-sm font-medium text-gray-500">Next Appointment</p>
-                                <p className="text-lg font-bold text-gray-900 mt-1">Apr 12, 2:00 PM</p>
-                                <p className="text-xs text-gray-400 font-medium">Dr. James Wright · Checkup</p>
+                                <p className="text-sm font-medium text-gray-500">Follow-up Plan</p>
+                                <p className="text-lg font-bold text-gray-900 mt-1">{profilePatient?.followUpWindow || 'Not set'}</p>
+                                <p className="text-xs text-gray-400 font-medium">{(profilePatient?.symptoms || []).slice(0, 2).join(', ') || 'No active symptoms'}</p>
                             </div>
                         </div>
                     </motion.section>
@@ -317,7 +502,7 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
                                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                                             <div>
                                                 <p className="font-semibold text-gray-900">{r.doctor}</p>
-                                                <p className="text-sm text-gray-500">{r.specialty} · {r.hospital}</p>
+                                                <p className="text-sm text-gray-500">{r.specialty} Â· {r.hospital}</p>
                                                 <p className="text-sm text-gray-600 mt-1">Reason: <span className="italic">{r.reason}</span></p>
                                                 <p className="text-xs text-gray-400 mt-1">Requested {r.date}</p>
                                             </div>
@@ -417,12 +602,46 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
 
                             {/* Audit Log */}
                             <motion.section variants={itemVariants}>
-                                <div className="flex items-center gap-2 mb-4">
-                                    <Share2 className="text-gray-400" size={20} />
-                                    <h3 className="text-lg font-bold text-gray-900">Recent Activity</h3>
+                                <div className="flex items-center justify-between gap-3 mb-4">
+                                    <div className="flex items-center gap-2">
+                                        <Share2 className="text-gray-400" size={20} />
+                                        <h3 className="text-lg font-bold text-gray-900">Recent Activity</h3>
+                                    </div>
+                                    <div className="flex flex-wrap justify-end gap-2">
+                                        <button
+                                            onClick={handleGenerateAuditDigest}
+                                            disabled={auditDigestLoading}
+                                            className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-300"
+                                        >
+                                            <Sparkles size={14} />
+                                            {auditDigestLoading ? 'Generating...' : 'AI Digest'}
+                                        </button>
+                                        {auditDigest ? (
+                                            <button
+                                                onClick={() => playSummaryAudio({
+                                                    summaryId: auditDigestSummaryId,
+                                                    fallbackText: auditDigest,
+                                                    busyKey: 'audit-digest',
+                                                })}
+                                                disabled={audioBusyKey === 'audit-digest'}
+                                                className="inline-flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-orange-300"
+                                            >
+                                                <Volume2 size={14} />
+                                                {audioBusyKey === 'audit-digest' ? 'Speaking...' : 'Speak'}
+                                            </button>
+                                        ) : null}
+                                    </div>
                                 </div>
+                                {auditDigest ? (
+                                    <div className="mb-3 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                                        <p className="text-[11px] uppercase tracking-wide font-semibold text-slate-600 mb-1">
+                                            Assistive Audit Summary
+                                        </p>
+                                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{auditDigest}</p>
+                                    </div>
+                                ) : null}
                                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-100">
-                                    {mockAuditLog.slice(0, 3).map(log => (
+                                    {fallbackAuditLog.slice(0, 3).map(log => (
                                         <div key={log.id} className="px-5 py-4 flex items-center justify-between">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 text-xs font-bold">
@@ -527,12 +746,7 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
             {/* Record Detail Modal */}
             <AnimatePresence>
                 {viewingRecord && (() => {
-                    // Find the matching patient record in the shared store to get doctor notes + PDFs
-                    const storePatient = getPatients().find(p =>
-                        viewingRecord.doctor.includes(p.name?.split(' ').pop() || '__') ||
-                        // fallback: match by id position (mock records map 1:1 to patients)
-                        p.id === viewingRecord.id
-                    )
+                    const storePatient = profilePatient
                     return (
                         <motion.div
                             initial={{ opacity: 0 }}
@@ -552,7 +766,7 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
                                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
                                     <div>
                                         <h3 className="text-lg font-bold text-gray-900">{viewingRecord.type}</h3>
-                                        <p className="text-sm text-gray-500">{viewingRecord.date} · {viewingRecord.doctor}</p>
+                                        <p className="text-sm text-gray-500">{viewingRecord.date} Â· {viewingRecord.doctor}</p>
                                     </div>
                                     <button onClick={() => setViewingRecord(null)} className="p-2 hover:bg-gray-200 rounded-lg transition-colors">
                                         <X size={18} className="text-gray-500" />
@@ -563,8 +777,44 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
                                 <div className="p-6 overflow-y-auto space-y-5">
                                     {/* Summary */}
                                     <div>
-                                        <p className="text-xs font-semibold uppercase text-gray-400 mb-1 tracking-wider">Summary</p>
+                                        <div className="flex items-center justify-between gap-3 mb-2">
+                                            <p className="text-xs font-semibold uppercase text-gray-400 tracking-wider">Summary</p>
+                                            <div className="flex flex-wrap justify-end gap-2">
+                                                <button
+                                                    onClick={() => handleGenerateSummary(viewingRecord)}
+                                                    disabled={aiLoadingRecordId === viewingRecord.id}
+                                                    className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                                                >
+                                                    <Sparkles size={13} />
+                                                    {aiLoadingRecordId === viewingRecord.id ? 'Generating...' : 'Explain in Plain Language'}
+                                                </button>
+                                                {aiSummaryByRecordId[viewingRecord.id] ? (
+                                                    <button
+                                                        onClick={() => playSummaryAudio({
+                                                            summaryId: summaryMetaByRecordId[viewingRecord.id]?.summaryId || null,
+                                                            fallbackText: aiSummaryByRecordId[viewingRecord.id],
+                                                            busyKey: `record-${viewingRecord.id}`,
+                                                        })}
+                                                        disabled={audioBusyKey === `record-${viewingRecord.id}`}
+                                                        className="inline-flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-orange-300"
+                                                    >
+                                                        <Volume2 size={13} />
+                                                        {audioBusyKey === `record-${viewingRecord.id}` ? 'Speaking...' : 'Speak Summary'}
+                                                    </button>
+                                                ) : null}
+                                            </div>
+                                        </div>
                                         <p className="text-sm text-gray-700">{viewingRecord.summary}</p>
+                                        {aiSummaryByRecordId[viewingRecord.id] ? (
+                                            <div className="mt-3 bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                                                <p className="text-xs uppercase font-semibold text-emerald-700 mb-1">
+                                                    Patient-Friendly AI Summary
+                                                </p>
+                                                <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                                                    {aiSummaryByRecordId[viewingRecord.id]}
+                                                </p>
+                                            </div>
+                                        ) : null}
                                     </div>
 
                                     {/* Doctor clinical notes from store */}
@@ -594,7 +844,7 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
                                                     >
                                                         <FileText size={18} className="text-blue-500 flex-shrink-0" />
                                                         <span className="text-sm font-medium text-blue-700 group-hover:underline truncate">{att.name}</span>
-                                                        <span className="text-xs text-blue-400 ml-auto flex-shrink-0">Open ↗</span>
+                                                        <span className="text-xs text-blue-400 ml-auto flex-shrink-0">Open â†—</span>
                                                     </a>
                                                 ))}
                                             </div>
@@ -754,3 +1004,6 @@ export default function PatientDashboard({ roleOverride = 'patient' }) {
         </div>
     )
 }
+
+
+

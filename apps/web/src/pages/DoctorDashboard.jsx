@@ -1,18 +1,30 @@
 import { useAuth0 } from '@auth0/auth0-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Users, Activity, FileText, CheckCircle, Clock, AlertTriangle, Sparkles, LogOut, FileSearch, Plus, Edit2, X, Send, Paperclip, Trash2 } from 'lucide-react'
+import { Search, Users, Activity, FileText, CheckCircle, Clock, AlertTriangle, Sparkles, LogOut, FileSearch, Plus, Edit2, X, Send, Paperclip, Trash2, Volume2, Save } from 'lucide-react'
 import confetti from 'canvas-confetti'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import Chatbot from '../components/Chatbot'
 import Logo from '../components/Logo'
 import { getPatients, upsertPatient, addPatient as storeAddPatient } from '../store/patients'
-import { resolveRoleAndUserId } from '../lib/auth'
-import { createAccessRequest, getAllRecordCategories } from '../lib/api'
+import { getAvatarInitial, getDisplayName, resolveRoleAndUserId } from '../lib/auth'
+import {
+    createAccessRequest,
+    generateContinuityReport,
+    generateDoctorBrief,
+    generateSummaryAudio,
+    generateVisitRecommendation,
+    fetchSummaryAudioBlob,
+    getAllRecordCategories,
+    getBackendMode,
+    updateSummaryContent,
+} from '../lib/api'
 
 
 const mockAISummary = {
+    id: null,
+    type: 'doctor_brief',
     patient: 'Sarah Chen',
     summary: 'Patient presents with well-controlled Type 1 Diabetes (HbA1c 6.8%, target <7%). Current regimen of Insulin and Metformin is effective. No evidence of nephropathy or retinopathy at last screening. Recent cardiac risk factors are low. Recommend continuation of current management with 3-month HbA1c follow-up. Penicillin and Sulfa drug allergies documented — avoid in prescriptions.',
     flags: ['Allergy: Penicillin', 'Allergy: Sulfa drugs'],
@@ -28,6 +40,8 @@ const clinicData = [
     { time: '3 PM', patients: 1 },
 ]
 
+const AI_NOTE_STORAGE_KEY = 'healthconnect_doctor_ai_notes'
+
 function StatusBadge({ status }) {
     const colors = {
         Active: 'bg-green-100 text-green-800',
@@ -39,23 +53,121 @@ function StatusBadge({ status }) {
 
 export default function DoctorDashboard() {
     const { user, logout, getAccessTokenSilently } = useAuth0()
+    const backendMode = getBackendMode()
     const [search, setSearch] = useState('')
     const [requestSent, setRequestSent] = useState({})
     const [toast, setToast] = useState(null)
+    const [aiSummary, setAiSummary] = useState(mockAISummary)
+    const [aiDraft, setAiDraft] = useState(mockAISummary.summary)
+    const [aiLoading, setAiLoading] = useState(false)
+    const [aiSpeaking, setAiSpeaking] = useState(false)
+    const [lastRequestByPatient, setLastRequestByPatient] = useState({})
+    const [selectedAiPatientId, setSelectedAiPatientId] = useState(null)
+    const [aiNotesByPatient, setAiNotesByPatient] = useState(() => {
+        try {
+            const raw = localStorage.getItem(AI_NOTE_STORAGE_KEY)
+            return raw ? JSON.parse(raw) : {}
+        } catch {
+            return {}
+        }
+    })
 
     // Patient Management State
     const [patients, setPatients] = useState(() => getPatients())
     const [modal, setModal] = useState({ isOpen: false, mode: 'add', patient: null })
-    const [formData, setFormData] = useState({ name: '', age: '', mrn: '', condition: '', description: '', newFeedback: '', email: '', status: 'Active', attachments: [] })
+    const [formData, setFormData] = useState({
+        name: '',
+        age: '',
+        mrn: '',
+        condition: '',
+        description: '',
+        newFeedback: '',
+        email: '',
+        status: 'Active',
+        attachments: [],
+        symptomsText: '',
+        lastPhysicalDate: '',
+        followUpWindow: '',
+    })
     const [pendingFiles, setPendingFiles] = useState([]) // File objects not yet saved
     const [requestDataModal, setRequestDataModal] = useState(false)
     const [requestForm, setRequestForm] = useState({ patientName: '', fromEmergencyContact: false })
     const authContext = useMemo(() => resolveRoleAndUserId(user, 'doctor'), [user])
+    const doctorDisplayName = useMemo(() => getDisplayName(user, 'doctor'), [user])
+    const doctorAvatarInitial = useMemo(() => getAvatarInitial(user, 'doctor'), [user])
+    const selectedAiPatient = useMemo(
+        () => patients.find((patient) => patient.id === selectedAiPatientId) || null,
+        [patients, selectedAiPatientId],
+    )
+    const selectedRequestId = selectedAiPatient ? lastRequestByPatient[selectedAiPatient.id] : null
+    const requiresFastApiRequest = backendMode === 'fastapi'
+    const canRunBrief = Boolean(
+        selectedAiPatient && (!requiresFastApiRequest || Boolean(selectedRequestId)),
+    )
 
     const filtered = patients.filter(p =>
         p.email.toLowerCase().includes(search.toLowerCase()) ||
         p.name.toLowerCase().includes(search.toLowerCase())
     )
+
+    function resolveBackendPatientId(patient) {
+        if (backendMode !== 'fastapi') {
+            return patient?.id || Number.parseInt(import.meta.env.VITE_LEGACY_PATIENT_ID || '1', 10)
+        }
+
+        const mapped = Number.parseInt(String(patient?.backendPatientId ?? patient?.id ?? ''), 10)
+        if (Number.isFinite(mapped) && mapped > 0) return mapped
+
+        const fallback = Number.parseInt(import.meta.env.VITE_DEMO_PATIENT_ID || '1', 10)
+        if (Number.isFinite(fallback) && fallback > 0) return fallback
+        return 1
+    }
+
+    function savePatientAiDraft(patientId, content) {
+        setAiNotesByPatient(prev => {
+            const next = { ...prev, [patientId]: content }
+            localStorage.setItem(AI_NOTE_STORAGE_KEY, JSON.stringify(next))
+            return next
+        })
+    }
+
+    function speakWithBrowser(text) {
+        if (!window.speechSynthesis) {
+            throw new Error('Browser speech synthesis is not available on this device.')
+        }
+        window.speechSynthesis.cancel()
+        const utterance = new window.SpeechSynthesisUtterance(text)
+        utterance.rate = 0.95
+        window.speechSynthesis.speak(utterance)
+    }
+
+    useEffect(() => {
+        if (patients.length === 0) {
+            setSelectedAiPatientId(null)
+            return
+        }
+        if (selectedAiPatientId && patients.some((patient) => patient.id === selectedAiPatientId)) {
+            return
+        }
+        setSelectedAiPatientId(patients[0].id)
+    }, [patients, selectedAiPatientId])
+
+    useEffect(() => {
+        if (!selectedAiPatient) return
+        setAiSummary(prev => ({ ...prev, patient: selectedAiPatient.name }))
+        const saved = aiNotesByPatient[selectedAiPatient.id]
+        if (typeof saved === 'string' && saved.trim()) {
+            setAiDraft(saved)
+            return
+        }
+
+        if (aiSummary.patient === selectedAiPatient.name && aiSummary.summary) {
+            setAiDraft(aiSummary.summary)
+            return
+        }
+
+        setAiDraft(`Hi ${doctorDisplayName}. Generate a note for ${selectedAiPatient.name} to review visit readiness.`)
+    }, [selectedAiPatient, aiNotesByPatient, aiSummary.patient, aiSummary.summary, doctorDisplayName])
 
     async function resolveTokenIfConfigured() {
         if (!import.meta.env.VITE_AUTH0_AUDIENCE) return null
@@ -64,7 +176,7 @@ export default function DoctorDashboard() {
 
     async function submitAccessRequest({ patientId, reason, breakGlassRequested = false }) {
         const token = await resolveTokenIfConfigured()
-        await createAccessRequest({
+        return createAccessRequest({
             patientId,
             reason,
             durationHours: breakGlassRequested ? 4 : 24,
@@ -77,15 +189,13 @@ export default function DoctorDashboard() {
 
     async function handleRequest(id) {
         try {
-            if (id !== 1) {
-                throw new Error('Only the seeded demo patient is mapped to the backend right now.')
-            }
-
-            const patientName = patients.find(p => p.id === id)?.name || 'this patient'
-            await submitAccessRequest({
-                patientId: 1,
+            const patient = patients.find(p => p.id === id) || null
+            const patientName = patient?.name || 'this patient'
+            const accessRequest = await submitAccessRequest({
+                patientId: resolveBackendPatientId(patient),
                 reason: `Doctor requested standard review access for ${patientName}.`,
             })
+            setLastRequestByPatient(prev => ({ ...prev, [id]: accessRequest?.id || null }))
             setRequestSent(prev => ({ ...prev, [id]: true }))
             setToast(`Access request sent for ${patientName}`)
         } catch (error) {
@@ -95,22 +205,282 @@ export default function DoctorDashboard() {
         }
     }
 
+    function buildPatientContext(patient) {
+        return [
+            `Name: ${patient.name}`,
+            `Condition: ${patient.condition || 'Not specified'}`,
+            `MRN: ${patient.mrn || 'N/A'}`,
+            `Symptoms: ${(patient.symptoms || []).join(', ') || 'None reported'}`,
+            `Last physical: ${patient.lastPhysicalDate || patient.lastVisit || 'Unknown'}`,
+            `Planned follow-up window: ${patient.followUpWindow || 'Not set'}`,
+            `Latest clinical notes: ${patient.description || 'No notes provided.'}`,
+            `Recent feedback: ${(patient.feedback || [])
+                .slice(0, 2)
+                .map(item => `${item.date}: ${item.message}`)
+                .join(' | ') || 'None'}`,
+        ].join('\n')
+    }
+
+    async function handleGenerateBrief(patient = selectedAiPatient) {
+        if (!patient) return
+        setAiLoading(true)
+        try {
+            const token = await resolveTokenIfConfigured()
+            const brief = await generateDoctorBrief({
+                requestId: lastRequestByPatient[patient.id] || null,
+                patientId: resolveBackendPatientId(patient),
+                patientName: patient.name,
+                patientContext: buildPatientContext(patient),
+                visitContext: `Pre-visit briefing for ${patient.name}`,
+                userId: authContext.userId,
+                token,
+            })
+
+            const nextFlags = (patient.condition || '')
+                .split(',')
+                .map(item => item.trim())
+                .filter(Boolean)
+                .slice(0, 3)
+                .map(item => `Condition: ${item}`)
+
+            setAiSummary({
+                id: brief.id || null,
+                type: brief.summary_type || 'doctor_brief',
+                patient: patient.name,
+                summary: brief.content,
+                flags: nextFlags.length > 0 ? nextFlags : ['No critical flags identified'],
+                lastUpdated: new Date().toISOString().slice(0, 10),
+            })
+            setAiDraft(brief.content)
+            savePatientAiDraft(patient.id, brief.content)
+            setToast(`Generated doctor brief for ${patient.name}`)
+        } catch (error) {
+            setToast(error?.message || 'Could not generate doctor brief')
+        } finally {
+            setAiLoading(false)
+            setTimeout(() => setToast(null), 3000)
+        }
+    }
+
+    async function handleGenerateContinuity(patient = selectedAiPatient) {
+        if (!patient) return
+        setAiLoading(true)
+        try {
+            const token = await resolveTokenIfConfigured()
+            const report = await generateContinuityReport({
+                patientId: resolveBackendPatientId(patient),
+                doctorId: authContext.userId,
+                requestId: lastRequestByPatient[patient.id] || null,
+                patientContext: buildPatientContext(patient),
+                visitContext: `Continuity report for ${patient.name}`,
+                userId: authContext.userId,
+                token,
+            })
+
+            setAiSummary({
+                id: report.id || null,
+                type: report.summary_type || 'doctor_brief',
+                patient: patient.name,
+                summary: report.content,
+                flags: ['Continuity of care report'],
+                lastUpdated: new Date().toISOString().slice(0, 10),
+            })
+            setAiDraft(report.content)
+            savePatientAiDraft(patient.id, report.content)
+            setToast(`Generated continuity report for ${patient.name}`)
+        } catch (error) {
+            setToast(error?.message || 'Could not generate continuity report')
+        } finally {
+            setAiLoading(false)
+            setTimeout(() => setToast(null), 3000)
+        }
+    }
+
+    async function handleGenerateVisitRecommendation(patient = selectedAiPatient) {
+        if (!patient) return
+        setAiLoading(true)
+        try {
+            const token = await resolveTokenIfConfigured()
+            const recommendation = await generateVisitRecommendation({
+                patientId: resolveBackendPatientId(patient),
+                patientName: patient.name,
+                patientContext: buildPatientContext(patient),
+                lastPhysicalDate: patient.lastPhysicalDate || patient.lastVisit || null,
+                currentSymptoms: patient.symptoms || [],
+                accessRequestId: lastRequestByPatient[patient.id] || null,
+                userId: authContext.userId,
+                token,
+            })
+
+            const symptomFlags = (patient.symptoms || [])
+                .slice(0, 3)
+                .map(item => `Symptom: ${item}`)
+
+            setAiSummary({
+                id: recommendation.id || null,
+                type: recommendation.summary_type || 'visit_recommendation',
+                patient: patient.name,
+                summary: recommendation.content,
+                flags: symptomFlags.length > 0 ? symptomFlags : ['Routine follow-up planning'],
+                lastUpdated: new Date().toISOString().slice(0, 10),
+            })
+            setAiDraft(recommendation.content)
+            savePatientAiDraft(patient.id, recommendation.content)
+            setToast(`Generated visit recommendation for ${patient.name}`)
+        } catch (error) {
+            setToast(error?.message || 'Could not generate visit recommendation')
+        } finally {
+            setAiLoading(false)
+            setTimeout(() => setToast(null), 3000)
+        }
+    }
+
+    async function handleSaveAiNote() {
+        if (!selectedAiPatient || !aiDraft.trim()) {
+            setToast('Enter note content before saving.')
+            setTimeout(() => setToast(null), 3000)
+            return
+        }
+
+        try {
+            const token = await resolveTokenIfConfigured()
+            let savedContent = aiDraft
+
+            if (backendMode === 'fastapi' && aiSummary.id) {
+                const updated = await updateSummaryContent({
+                    summaryId: aiSummary.id,
+                    content: aiDraft,
+                    userId: authContext.userId,
+                    token,
+                })
+                savedContent = updated.content
+                setAiSummary(prev => ({
+                    ...prev,
+                    summary: updated.content,
+                    lastUpdated: new Date().toISOString().slice(0, 10),
+                }))
+                setAiDraft(updated.content)
+            } else {
+                setAiSummary(prev => ({
+                    ...prev,
+                    summary: aiDraft,
+                    lastUpdated: new Date().toISOString().slice(0, 10),
+                }))
+            }
+
+            savePatientAiDraft(selectedAiPatient.id, savedContent)
+            setToast('AI note saved.')
+        } catch (error) {
+            setToast(error?.message || 'Could not save AI note')
+        } finally {
+            setTimeout(() => setToast(null), 3000)
+        }
+    }
+
+    async function handleSpeakAiSummary() {
+        const noteContent = aiDraft.trim() || aiSummary.summary
+        if (!noteContent) {
+            setToast('Generate an AI note before playing audio.')
+            setTimeout(() => setToast(null), 3000)
+            return
+        }
+
+        const spokenText = `Hi ${doctorDisplayName}. ${noteContent}`
+        setAiSpeaking(true)
+        try {
+            const token = await resolveTokenIfConfigured()
+
+            if (backendMode === 'fastapi' && aiSummary.id) {
+                if (aiDraft.trim() && aiDraft.trim() !== aiSummary.summary.trim()) {
+                    const updated = await updateSummaryContent({
+                        summaryId: aiSummary.id,
+                        content: aiDraft,
+                        userId: authContext.userId,
+                        token,
+                    })
+                    setAiSummary(prev => ({ ...prev, summary: updated.content }))
+                    setAiDraft(updated.content)
+                }
+
+                await generateSummaryAudio({
+                    summaryId: aiSummary.id,
+                    userId: authContext.userId,
+                    token,
+                })
+                const audioBlob = await fetchSummaryAudioBlob({
+                    summaryId: aiSummary.id,
+                    userId: authContext.userId,
+                    token,
+                })
+                const url = URL.createObjectURL(audioBlob)
+                const audio = new Audio(url)
+                await audio.play()
+                audio.onended = () => URL.revokeObjectURL(url)
+                return
+            }
+
+            speakWithBrowser(spokenText)
+        } catch (error) {
+            try {
+                speakWithBrowser(spokenText)
+            } catch {
+                setToast(error?.message || 'Could not play AI audio')
+                setTimeout(() => setToast(null), 3000)
+            }
+        } finally {
+            setAiSpeaking(false)
+        }
+    }
+
     // Modal Helpers
     function openAddModal() {
-        setFormData({ name: '', age: '', mrn: `MRN-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9999)).padStart(4, '0')}`, condition: '', description: '', newFeedback: '', email: '', status: 'Active', attachments: [] })
+        setFormData({
+            name: '',
+            age: '',
+            mrn: `MRN-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9999)).padStart(4, '0')}`,
+            condition: '',
+            description: '',
+            newFeedback: '',
+            email: '',
+            status: 'Active',
+            attachments: [],
+            symptomsText: '',
+            lastPhysicalDate: '',
+            followUpWindow: '',
+        })
         setPendingFiles([])
         setModal({ isOpen: true, mode: 'add', patient: null })
     }
 
     function openEditModal(patient) {
-        setFormData({ ...patient, attachments: patient.attachments || [], newFeedback: '' })
+        setFormData({
+            ...patient,
+            attachments: patient.attachments || [],
+            newFeedback: '',
+            symptomsText: (patient.symptoms || []).join(', '),
+            lastPhysicalDate: patient.lastPhysicalDate || '',
+            followUpWindow: patient.followUpWindow || '',
+        })
         setPendingFiles([])
         setModal({ isOpen: true, mode: 'edit', patient })
     }
 
     function closeModal() {
         setModal({ isOpen: false, mode: 'add', patient: null })
-        setFormData({ name: '', age: '', mrn: '', condition: '', description: '', newFeedback: '', email: '', status: 'Active', attachments: [] })
+        setFormData({
+            name: '',
+            age: '',
+            mrn: '',
+            condition: '',
+            description: '',
+            newFeedback: '',
+            email: '',
+            status: 'Active',
+            attachments: [],
+            symptomsText: '',
+            lastPhysicalDate: '',
+            followUpWindow: '',
+        })
         setPendingFiles([])
     }
 
@@ -164,22 +534,44 @@ export default function DoctorDashboard() {
         const allFeedback = formData.newFeedback?.trim()
             ? [{ date: new Date().toISOString().split('T')[0], message: formData.newFeedback.trim() }, ...existingFeedback]
             : existingFeedback
+        const normalizedSymptoms = (formData.symptomsText || '')
+            .split(',')
+            .map(item => item.trim())
+            .filter(Boolean)
+        const basePatientFields = { ...formData }
+        delete basePatientFields.newFeedback
+        delete basePatientFields.symptomsText
 
         if (modal.mode === 'add') {
             const newPatient = {
-                ...formData,
+                ...basePatientFields,
                 attachments: allAttachments,
                 feedback: allFeedback,
                 id: Date.now(),
                 lastVisit: new Date().toISOString().split('T')[0],
-                age: parseInt(formData.age, 10) || 0
+                age: parseInt(formData.age, 10) || 0,
+                symptoms: normalizedSymptoms,
+                lastPhysicalDate: formData.lastPhysicalDate || new Date().toISOString().split('T')[0],
+                followUpWindow: formData.followUpWindow || '4 weeks',
+                vitals: modal.patient?.vitals || { hba1c: 'Not set', bloodPressure: 'Not set', trendNote: 'Awaiting intake data' },
             }
             const updated = storeAddPatient(newPatient)
             setPatients([...updated])
             setToast(`Added new patient ${newPatient.name}`)
             fireStars()
         } else {
-            const updatedPatient = { ...formData, attachments: allAttachments, feedback: allFeedback, id: modal.patient.id, lastVisit: modal.patient.lastVisit, age: parseInt(formData.age, 10) || modal.patient.age }
+            const updatedPatient = {
+                ...basePatientFields,
+                attachments: allAttachments,
+                feedback: allFeedback,
+                id: modal.patient.id,
+                lastVisit: modal.patient.lastVisit,
+                age: parseInt(formData.age, 10) || modal.patient.age,
+                symptoms: normalizedSymptoms,
+                lastPhysicalDate: formData.lastPhysicalDate || modal.patient.lastPhysicalDate,
+                followUpWindow: formData.followUpWindow || modal.patient.followUpWindow,
+                vitals: modal.patient.vitals || { hba1c: 'Not set', bloodPressure: 'Not set', trendNote: 'Awaiting intake data' },
+            }
             upsertPatient(updatedPatient)
             setPatients(prev => prev.map(p => p.id === modal.patient.id ? updatedPatient : p))
             setToast(`Updated details for ${formData.name}`)
@@ -218,11 +610,11 @@ export default function DoctorDashboard() {
                     </div>
                     <div className="flex items-center gap-4">
                         <div className="text-right hidden sm:block">
-                            <p className="text-gray-900 text-sm font-medium">{user?.name || user?.email}</p>
+                            <p className="text-gray-900 text-sm font-medium">{doctorDisplayName}</p>
                             <p className="text-gray-700 text-xs">Physician</p>
                         </div>
                         <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                            {(user?.name || user?.email || 'D')[0].toUpperCase()}
+                            {doctorAvatarInitial}
                         </div>
                         <button
                             onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
@@ -240,9 +632,9 @@ export default function DoctorDashboard() {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
                     <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
                         <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                            Welcome, Dr. {user?.family_name || user?.name || 'there'} 🩺
+                            Welcome, {doctorDisplayName}
                         </h2>
-                        <p className="text-gray-500 text-sm mt-1">{user?.email} · {new Date().toLocaleDateString('en-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                        <p className="text-gray-500 text-sm mt-1">{user?.email || `${doctorDisplayName.toLowerCase().replace(/\s+/g, '.')}@healthconnect.demo`} | {new Date().toLocaleDateString('en-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                     </motion.div>
                 </div>
             </div>
@@ -291,7 +683,7 @@ export default function DoctorDashboard() {
                                                     </div>
                                                     <div>
                                                         <p className="font-medium text-gray-900 text-sm">{p.name}</p>
-                                                        <p className="text-xs text-gray-500">{p.email} · {p.mrn}</p>
+                                                        <p className="text-xs text-gray-500">{p.email} | {p.mrn}</p>
                                                     </div>
                                                 </div>
                                                 <button
@@ -416,23 +808,92 @@ export default function DoctorDashboard() {
                             <div className="bg-gradient-to-br from-white to-purple-50/30 rounded-xl shadow-sm border border-purple-100 p-6 relative overflow-hidden">
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-purple-100/50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
                                 <div className="relative">
+                                    <div className="mb-5 bg-white/70 border border-purple-100 rounded-xl p-4 space-y-3">
+                                        <label className="block text-xs uppercase tracking-wide font-semibold text-purple-700">
+                                            AI Actions
+                                        </label>
+                                        <select
+                                            value={selectedAiPatientId ?? ''}
+                                            onChange={(event) => setSelectedAiPatientId(Number.parseInt(event.target.value, 10))}
+                                            className="w-full px-3 py-2 text-sm rounded-lg border border-purple-200 bg-white focus:outline-none focus:ring-2 focus:ring-purple-400"
+                                        >
+                                            {patients.map((patient) => (
+                                                <option key={patient.id} value={patient.id}>
+                                                    {patient.name} ({patient.mrn})
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                            <button
+                                                onClick={() => handleGenerateBrief()}
+                                                disabled={aiLoading || !canRunBrief}
+                                                className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white text-sm font-semibold px-3 py-2 rounded-lg transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-purple-300"
+                                            >
+                                                {aiLoading ? 'Working...' : 'Generate Brief'}
+                                            </button>
+                                            <button
+                                                onClick={() => handleGenerateContinuity()}
+                                                disabled={aiLoading || !canRunBrief}
+                                                className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm font-semibold px-3 py-2 rounded-lg transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                            >
+                                                {aiLoading ? 'Working...' : 'Generate Report'}
+                                            </button>
+                                            <button
+                                                onClick={() => handleGenerateVisitRecommendation()}
+                                                disabled={aiLoading || !canRunBrief}
+                                                className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-sm font-semibold px-3 py-2 rounded-lg transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                                            >
+                                                {aiLoading ? 'Working...' : 'Recommend Visit'}
+                                            </button>
+                                        </div>
+                                        {requiresFastApiRequest && !selectedRequestId ? (
+                                            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                                Send an access request for this patient first, then generate AI outputs.
+                                            </p>
+                                        ) : null}
+                                    </div>
                                     <div className="flex items-start justify-between mb-5">
                                         <div>
-                                            <p className="font-bold text-gray-900 text-lg">{mockAISummary.patient}</p>
+                                            <p className="font-bold text-gray-900 text-lg">{aiSummary.patient}</p>
                                             <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
-                                                <Clock size={12} /> Last updated {mockAISummary.lastUpdated}
+                                                <Clock size={12} /> Last updated {aiSummary.lastUpdated}
                                             </p>
                                         </div>
+                                        <span className="text-xs font-semibold text-purple-700 bg-purple-100 px-2 py-1 rounded-md">
+                                            {aiLoading ? 'Working...' : backendMode.toUpperCase()}
+                                        </span>
                                     </div>
                                     <div className="flex flex-wrap gap-2 mb-5">
-                                        {mockAISummary.flags.map(f => (
+                                        {aiSummary.flags.map(f => (
                                             <span key={f} className="flex items-center gap-1 bg-red-50 border border-red-100 text-red-700 text-xs font-semibold px-2.5 py-1 rounded-md shadow-sm">
                                                 <AlertTriangle size={12} /> {f}
                                             </span>
                                         ))}
                                     </div>
-                                    <div className="bg-white/60 p-4 rounded-xl text-sm text-gray-700 leading-relaxed border border-purple-50 shadow-sm backdrop-blur-sm">
-                                        {mockAISummary.summary}
+                                    <div className="bg-white/60 p-4 rounded-xl text-sm text-gray-700 leading-relaxed border border-purple-50 shadow-sm backdrop-blur-sm space-y-3">
+                                        <textarea
+                                            value={aiDraft}
+                                            onChange={(event) => setAiDraft(event.target.value)}
+                                            className="w-full min-h-[170px] rounded-lg border border-purple-100 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                                            placeholder="AI note appears here. You can edit it before sharing."
+                                        />
+                                        <div className="flex flex-wrap gap-2">
+                                            <button
+                                                onClick={handleSaveAiNote}
+                                                className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-300"
+                                            >
+                                                <Save size={13} />
+                                                Save Note
+                                            </button>
+                                            <button
+                                                onClick={handleSpeakAiSummary}
+                                                disabled={aiSpeaking || aiLoading}
+                                                className="inline-flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-orange-300"
+                                            >
+                                                <Volume2 size={13} />
+                                                {aiSpeaking ? 'Speaking...' : 'Speak Note'}
+                                            </button>
+                                        </div>
                                     </div>
                                     <p className="text-[10px] text-gray-400 mt-4 italic flex items-start gap-1">
                                         <AlertTriangle size={12} className="shrink-0 mt-0.5" />
@@ -474,13 +935,26 @@ export default function DoctorDashboard() {
                             <form onSubmit={async (e) => {
                                 e.preventDefault()
                                 try {
-                                    await submitAccessRequest({
-                                        patientId: 1,
+                                    const normalizedName = requestForm.patientName.trim().toLowerCase()
+                                    const matchedPatient = patients.find(
+                                        (patient) => patient.name.trim().toLowerCase() === normalizedName,
+                                    ) || null
+                                    const backendPatientId = matchedPatient
+                                        ? resolveBackendPatientId(matchedPatient)
+                                        : Number.parseInt(import.meta.env.VITE_DEMO_PATIENT_ID || '1', 10)
+                                    const accessRequest = await submitAccessRequest({
+                                        patientId: backendPatientId,
                                         reason: requestForm.fromEmergencyContact
                                             ? `Emergency request for ${requestForm.patientName}.`
                                             : `Doctor requested records for ${requestForm.patientName}.`,
                                         breakGlassRequested: requestForm.fromEmergencyContact,
                                     })
+                                    if (accessRequest?.id) {
+                                        setLastRequestByPatient(prev => ({
+                                            ...prev,
+                                            [matchedPatient?.id || backendPatientId]: accessRequest.id,
+                                        }))
+                                    }
                                     const msg = requestForm.fromEmergencyContact
                                         ? `Emergency request sent for ${requestForm.patientName}`
                                         : `Data request sent for ${requestForm.patientName}`
@@ -614,6 +1088,38 @@ export default function DoctorDashboard() {
                                     </div>
 
                                     <div className="sm:col-span-2">
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Current Symptoms</label>
+                                        <input
+                                            type="text"
+                                            value={formData.symptomsText}
+                                            onChange={e => setFormData({ ...formData, symptomsText: e.target.value })}
+                                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                                            placeholder="e.g. fatigue, dizziness, headaches"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Last Physical</label>
+                                        <input
+                                            type="date"
+                                            value={formData.lastPhysicalDate}
+                                            onChange={e => setFormData({ ...formData, lastPhysicalDate: e.target.value })}
+                                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Follow-up Window</label>
+                                        <input
+                                            type="text"
+                                            value={formData.followUpWindow}
+                                            onChange={e => setFormData({ ...formData, followUpWindow: e.target.value })}
+                                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                                            placeholder="e.g. 3 months"
+                                        />
+                                    </div>
+
+                                    <div className="sm:col-span-2">
                                         <label className="block text-sm font-semibold text-gray-700 mb-1">Clinical Notes / Description</label>
                                         <textarea
                                             value={formData.description}
@@ -716,3 +1222,4 @@ export default function DoctorDashboard() {
         </div>
     )
 }
+

@@ -1,4 +1,5 @@
 const DEFAULT_ROLE_NAMESPACE = "https://healthconnect.app";
+const DEFAULT_FALLBACK_NAME = "Sawaab";
 
 function parseUserId(value, fallback) {
   const parsed = Number.parseInt(value ?? "", 10);
@@ -45,4 +46,31 @@ export function resolveRoleAndUserId(user, roleOverride = null) {
     role: selectedRole,
     userId: roleToUserId[selectedRole] ?? roleToUserId.patient,
   };
+}
+
+function pickBaseName(user) {
+  const candidate =
+    user?.given_name ||
+    user?.nickname ||
+    user?.family_name ||
+    user?.name ||
+    user?.email?.split?.("@")?.[0] ||
+    "";
+
+  const normalized = String(candidate).trim();
+  if (normalized) return normalized;
+  return import.meta.env.VITE_DEFAULT_USER_NAME || DEFAULT_FALLBACK_NAME;
+}
+
+export function getDisplayName(user, role = "patient") {
+  const baseName = pickBaseName(user);
+  if (role === "doctor") return `Dr. ${baseName}`;
+  return `Mr. ${baseName}`;
+}
+
+export function getAvatarInitial(user, role = "patient") {
+  const displayName = getDisplayName(user, role);
+  const cleaned = displayName.replace(/^(Dr\.|Mr\.)\s*/i, "").trim();
+  const first = cleaned.charAt(0);
+  return first ? first.toUpperCase() : "U";
 }
