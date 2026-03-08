@@ -141,7 +141,7 @@ function Caduceus({ phase }) {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default function RoleSelectPage() {
-    const { loginWithRedirect } = useAuth0()
+    const { loginWithRedirect, isAuthenticated, user } = useAuth0()
     const navigate = useNavigate()
     const [phase, setPhase] = useState('draw')
 

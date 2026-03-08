@@ -12,6 +12,8 @@
   "dependencies": {
     "@auth0/auth0-react": "^2.15.0",
     "@supabase/supabase-js": "^2.98.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
