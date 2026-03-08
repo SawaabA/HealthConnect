@@ -1,4 +1,4 @@
-# HealthConnect - Final Monorepo Demo Guide
+# HealthConnect - Final
 
 HealthConnect is a patient-controlled consent and access layer for healthcare records in the Canadian ecosystem.
 It does not replace hospital EHR systems. It controls who can access which record categories, for how long, and captures full audit history.
