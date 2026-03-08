@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
 import { useNavigate } from 'react-router-dom'
+import Logo from '../components/Logo'
 
-const T = { glow: 900, unravel: 1900, fade: 3700, reveal: 4200 }
+const T = { glow: 800, unravel: 1800, fade: 800, reveal: 2000 }
 
 // ── Caduceus ─────────────────────────────────────────────────────────────────
 // ViewBox 0 0 300 300, staff center x=150
@@ -224,11 +225,11 @@ export default function RoleSelectPage() {
           100% { opacity:1; letter-spacing:.12em; }
         }
         @keyframes hc-card-in {
-          0%   { opacity:0; transform:translateY(36px) scale(.96); }
+          0%   { opacity:0; transform:translateY(20px) scale(.98); }
           100% { opacity:1; transform:translateY(0)    scale(1);   }
         }
         @keyframes hc-title-in {
-          0%   { opacity:0; transform:translateY(-18px); }
+          0%   { opacity:0; transform:translateY(-10px); }
           100% { opacity:1; transform:translateY(0);     }
         }
 
@@ -247,30 +248,28 @@ export default function RoleSelectPage() {
                      transform-box: fill-box; transform-origin: 0% 59%; }
 
         .hc-wordmark { animation: hc-wordmark 1s ease-out .35s both; }
-        .hc-card-1   { animation: hc-card-in .7s cubic-bezier(.34,1.15,.64,1) .05s both; }
-        .hc-card-2   { animation: hc-card-in .7s cubic-bezier(.34,1.15,.64,1) .20s both; }
-        .hc-title    { animation: hc-title-in .55s ease-out both; }
+        .hc-card-1   { animation: hc-card-in .4s cubic-bezier(.34,1.15,.64,1) both; }
+        .hc-card-2   { animation: hc-card-in .4s cubic-bezier(.34,1.15,.64,1) .1s both; }
+        .hc-title    { animation: hc-title-in .4s ease-out both; }
       `}</style>
 
             <div style={{
                 minHeight: '100vh', display: 'flex', flexDirection: 'column',
                 backgroundColor: isDark ? '#010f0a' : '#f0fdf4',
-                transition: 'background-color 0.9s ease',
+                transition: 'background-color 0.3s ease-out',
             }}>
 
                 {/* Header */}
-                <header style={{ backgroundColor: '#15803d' }} className="shadow-md flex-none">
+                <header style={{ backgroundColor: '#adebb3' }} className="shadow-md flex-none">
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
                         <button onClick={() => navigate('/')} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-                            <div className="w-9 h-9 bg-white rounded-full flex items-center justify-center">
-                                <span className="text-green-700 font-bold">HC</span>
-                            </div>
-                            <div>
-                                <p className="text-white font-bold text-lg leading-tight">HealthConnect</p>
-                                <p className="text-green-200 text-xs">Secure Medical Records Platform</p>
+                            <Logo className="w-9 h-9" />
+                            <div className="text-left">
+                                <p className="text-gray-900 font-bold text-lg leading-tight">HealthConnect</p>
+                                <p className="text-gray-700 text-xs">Secure Medical Records Platform</p>
                             </div>
                         </button>
-                        <button onClick={() => navigate('/')} className="text-green-200 hover:text-white text-sm transition-colors flex items-center gap-1">
+                        <button onClick={() => navigate('/')} className="text-gray-800 hover:text-gray-900 text-sm transition-colors flex items-center gap-1">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                             </svg>

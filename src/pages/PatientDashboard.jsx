@@ -1,9 +1,11 @@
 import { useAuth0 } from '@auth0/auth0-react'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Bell, HeartPulse, Activity, FileText, Calendar, Clock, AlertCircle, Share2, LogOut, CheckCircle, XCircle } from 'lucide-react'
+import { Bell, HeartPulse, Activity, FileText, Calendar, Clock, AlertCircle, Share2, LogOut, CheckCircle, XCircle, Shield, X, UserCheck, Eye, Paperclip, MessageSquare } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import Chatbot from '../components/Chatbot'
+import Logo from '../components/Logo'
+import { getPatients } from '../store/patients'
 
 const mockRecords = [
     { id: 1, date: '2025-11-14', type: 'Lab Results', doctor: 'Dr. Amir Patel', status: 'Reviewed', summary: 'HbA1c: 6.8% — within target range.' },
@@ -22,6 +24,12 @@ const mockAuditLog = [
     { id: 2, action: 'Access Granted', actor: 'You', time: '2026-03-06 03:22 PM' },
     { id: 3, action: 'Login', actor: 'You', time: '2026-03-06 03:20 PM' },
     { id: 4, action: 'Record Accessed', actor: 'Dr. Susan Kwan', time: '2026-03-05 11:45 AM' },
+]
+
+const mockDependents = [
+    { id: 1, name: 'Aisha Minhas', age: 8, relationship: 'Child (Legal Guardian)', condition: 'Asthma', mrn: 'MRN-2024-1201' },
+    { id: 2, name: 'Yusuf Minhas', age: 5, relationship: 'Child (Legal Guardian)', condition: 'None', mrn: 'MRN-2024-1202' },
+    { id: 3, name: 'Fatima Khan', age: 72, relationship: 'Emergency Contact', condition: 'Type 2 Diabetes, Hypertension', mrn: 'MRN-2024-0811' },
 ]
 
 const healthData = [
@@ -52,11 +60,12 @@ export default function PatientDashboard() {
     const [requests, setRequests] = useState(mockRequests)
     const [showQR, setShowQR] = useState(false)
     const [toast, setToast] = useState(null)
+    const [grantModal, setGrantModal] = useState({ isOpen: false, dependent: null })
+    const [grantDoctor, setGrantDoctor] = useState('')
+    const [viewingRecord, setViewingRecord] = useState(null) // holds a mockRecord entry
 
     function handleRequest(id, action) {
         setRequests(prev => prev.filter(r => r.id !== id))
-        
-        // Custom animated toast notification instead of alert()
         setToast({ id, action })
         setTimeout(() => setToast(null), 3000)
     }
@@ -79,28 +88,26 @@ export default function PatientDashboard() {
     return (
         <div className="min-h-screen bg-gray-50">
             {/* Header */}
-            <header className="bg-green-700 shadow-md">
+            <header style={{ backgroundColor: '#adebb3' }} className="shadow-md">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 bg-white rounded-full flex items-center justify-center">
-                            <span className="text-green-700 font-bold">HC</span>
-                        </div>
+                        <Logo className="w-9 h-9" />
                         <div>
-                            <h1 className="text-white font-bold text-lg">HealthConnect</h1>
-                            <p className="text-green-200 text-xs">Patient Portal</p>
+                            <h1 className="text-gray-900 font-bold text-lg">HealthConnect</h1>
+                            <p className="text-gray-700 text-xs">Patient Portal</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-4">
                         <div className="text-right hidden sm:block">
-                            <p className="text-white text-sm font-medium">{user?.name || user?.email}</p>
-                            <p className="text-green-200 text-xs">Patient</p>
+                            <p className="text-gray-900 text-sm font-medium">{user?.name || user?.email}</p>
+                            <p className="text-gray-700 text-xs">Patient</p>
                         </div>
                         <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
                             {(user?.name || user?.email || 'P')[0].toUpperCase()}
                         </div>
                         <button
                             onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
-                            className="flex items-center gap-2 bg-green-800 hover:bg-green-900 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+                            className="flex items-center gap-2 bg-white hover:bg-gray-100 text-gray-900 text-sm px-4 py-2 rounded-lg transition-colors shadow-sm"
                         >
                             <LogOut size={16} />
                             <span className="hidden sm:inline">Sign Out</span>
@@ -133,7 +140,7 @@ export default function PatientDashboard() {
             </div>
 
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <motion.div 
+                <motion.div
                     variants={containerVariants}
                     initial="hidden"
                     animate="show"
@@ -179,7 +186,10 @@ export default function PatientDashboard() {
                             </div>
                             <div className="space-y-3">
                                 {requests.map(r => (
-                                    <div key={r.id} className="bg-white rounded-xl border border-red-100 shadow-sm p-5 hover:shadow-md transition-shadow">
+                                    <div
+                                        key={r.id}
+                                        className="bg-white rounded-xl border border-red-100 shadow-sm p-5 hover:shadow-md transition-shadow"
+                                    >
                                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                                             <div>
                                                 <p className="font-semibold text-gray-900">{r.doctor}</p>
@@ -215,25 +225,34 @@ export default function PatientDashboard() {
                                 <FileText className="text-green-600" size={20} />
                                 <h3 className="text-lg font-bold text-gray-900">My Records</h3>
                             </div>
-                            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                                <table className="w-full text-sm">
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+                                <table className="w-full text-sm min-w-[640px]">
                                     <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
                                         <tr>
                                             <th className="px-5 py-3 text-left">Date</th>
                                             <th className="px-5 py-3 text-left">Type</th>
-                                            <th className="px-5 py-3 text-left hidden sm:table-cell">Doctor</th>
-                                            <th className="px-5 py-3 text-left hidden md:table-cell">Summary</th>
+                                            <th className="px-5 py-3 text-left">Doctor</th>
+                                            <th className="px-5 py-3 text-left">Summary</th>
                                             <th className="px-5 py-3 text-left">Status</th>
+                                            <th className="px-5 py-3 text-left">View</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
                                         {mockRecords.map(r => (
-                                            <tr key={r.id} className="hover:bg-gray-50 transition-colors group cursor-pointer">
-                                                <td className="px-5 py-4 text-gray-600">{r.date}</td>
-                                                <td className="px-5 py-4 font-medium text-gray-900 group-hover:text-green-700 transition-colors">{r.type}</td>
-                                                <td className="px-5 py-4 text-gray-600 hidden sm:table-cell">{r.doctor}</td>
-                                                <td className="px-5 py-4 text-gray-500 hidden md:table-cell max-w-xs truncate">{r.summary}</td>
-                                                <td className="px-5 py-4"><StatusBadge status={r.status} /></td>
+                                            <tr key={r.id} className="hover:bg-gray-50 transition-colors group">
+                                                <td className="px-5 py-4 text-gray-600 whitespace-nowrap">{r.date}</td>
+                                                <td className="px-5 py-4 font-medium text-gray-900 group-hover:text-green-700 transition-colors whitespace-nowrap">{r.type}</td>
+                                                <td className="px-5 py-4 text-gray-600 whitespace-nowrap">{r.doctor}</td>
+                                                <td className="px-5 py-4 text-gray-500 max-w-xs">{r.summary}</td>
+                                                <td className="px-5 py-4 whitespace-nowrap"><StatusBadge status={r.status} /></td>
+                                                <td className="px-5 py-4 whitespace-nowrap">
+                                                    <button
+                                                        onClick={() => setViewingRecord(r)}
+                                                        className="flex items-center gap-1.5 bg-gray-100 hover:bg-green-100 hover:text-green-700 text-gray-600 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                                                    >
+                                                        <Eye size={13} /> View
+                                                    </button>
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -255,14 +274,14 @@ export default function PatientDashboard() {
                                             <AreaChart data={healthData} margin={{ top: 5, right: 0, left: -25, bottom: 0 }}>
                                                 <defs>
                                                     <linearGradient id="colorHba1c" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="5%" stopColor="#16a34a" stopOpacity={0.3}/>
-                                                        <stop offset="95%" stopColor="#16a34a" stopOpacity={0}/>
+                                                        <stop offset="5%" stopColor="#16a34a" stopOpacity={0.3} />
+                                                        <stop offset="95%" stopColor="#16a34a" stopOpacity={0} />
                                                     </linearGradient>
                                                 </defs>
                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                                                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#9ca3af' }} />
                                                 <YAxis domain={['auto', 'auto']} axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#9ca3af' }} />
-                                                <Tooltip 
+                                                <Tooltip
                                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                                 />
                                                 <Area type="monotone" dataKey="hba1c" stroke="#16a34a" strokeWidth={3} fillOpacity={1} fill="url(#colorHba1c)" />
@@ -297,24 +316,269 @@ export default function PatientDashboard() {
                             </motion.section>
                         </div>
                     </div>
+
+                    {/* Doctor Feedback */}
+                    {(() => {
+                        const allFeedback = getPatients().flatMap(p => (p.feedback || []).map(f => ({ ...f, patientName: p.name })))
+                            .sort((a, b) => b.date.localeCompare(a.date))
+                        if (allFeedback.length === 0) return null
+                        return (
+                            <motion.section variants={itemVariants}>
+                                <div className="flex items-center gap-2 mb-4">
+                                    <MessageSquare className="text-amber-500" size={20} />
+                                    <h3 className="text-lg font-bold text-gray-900">Doctor's Feedback</h3>
+                                    <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">{allFeedback.length}</span>
+                                </div>
+                                <div className="space-y-3">
+                                    {allFeedback.map((f, i) => (
+                                        <div key={i} className="bg-white rounded-xl shadow-sm border border-amber-100 p-5">
+                                            <div className="flex items-start justify-between gap-3 mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center">
+                                                        <MessageSquare size={14} className="text-amber-600" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-gray-900">Your Doctor</p>
+                                                        <p className="text-xs text-gray-400">{f.date}</p>
+                                                    </div>
+                                                </div>
+                                                <span className="text-xs bg-amber-50 text-amber-600 font-semibold px-2 py-0.5 rounded-full whitespace-nowrap">Visit Note</span>
+                                            </div>
+                                            <p className="text-sm text-gray-700 leading-relaxed">{f.message}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </motion.section>
+                        )
+                    })()}
+
+                    {/* Emergency Contacts & Dependents */}
+                    <motion.section variants={itemVariants}>
+                        <div className="flex items-center gap-2 mb-4">
+                            <Shield className="text-indigo-500" size={20} />
+                            <h3 className="text-lg font-bold text-gray-900">Emergency Contacts & Dependents</h3>
+                            <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-0.5 rounded-full">{mockDependents.length}</span>
+                        </div>
+                        <p className="text-sm text-gray-500 mb-4">People you are the legal guardian or emergency contact for. You can grant doctor access to their records on their behalf.</p>
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                            <table className="w-full text-sm">
+                                <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
+                                    <tr>
+                                        <th className="px-5 py-3 text-left">Name</th>
+                                        <th className="px-5 py-3 text-left">Age</th>
+                                        <th className="px-5 py-3 text-left hidden sm:table-cell">Relationship</th>
+                                        <th className="px-5 py-3 text-left hidden md:table-cell">Condition</th>
+                                        <th className="px-5 py-3 text-left">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {mockDependents.map(d => (
+                                        <tr key={d.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-5 py-4 font-medium text-gray-900">{d.name}</td>
+                                            <td className="px-5 py-4 text-gray-600">{d.age}</td>
+                                            <td className="px-5 py-4 text-gray-600 hidden sm:table-cell">
+                                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${d.relationship.includes('Child') ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'}`}>
+                                                    {d.relationship}
+                                                </span>
+                                            </td>
+                                            <td className="px-5 py-4 text-gray-500 hidden md:table-cell">{d.condition}</td>
+                                            <td className="px-5 py-4">
+                                                <button
+                                                    onClick={() => { setGrantModal({ isOpen: true, dependent: d }); setGrantDoctor('') }}
+                                                    className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                                                >
+                                                    <UserCheck size={14} />
+                                                    Grant Access
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </motion.section>
                 </motion.div>
             </main>
+
+            {/* Record Detail Modal */}
+            <AnimatePresence>
+                {viewingRecord && (() => {
+                    // Find the matching patient record in the shared store to get doctor notes + PDFs
+                    const storePatient = getPatients().find(p =>
+                        viewingRecord.doctor.includes(p.name?.split(' ').pop() || '__') ||
+                        // fallback: match by id position (mock records map 1:1 to patients)
+                        p.id === viewingRecord.id
+                    )
+                    return (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                            onClick={() => setViewingRecord(null)}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.9, y: 20 }}
+                                animate={{ scale: 1, y: 0 }}
+                                exit={{ scale: 0.9, y: 20 }}
+                                className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden max-h-[85vh] flex flex-col"
+                                onClick={e => e.stopPropagation()}
+                            >
+                                {/* Header */}
+                                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
+                                    <div>
+                                        <h3 className="text-lg font-bold text-gray-900">{viewingRecord.type}</h3>
+                                        <p className="text-sm text-gray-500">{viewingRecord.date} · {viewingRecord.doctor}</p>
+                                    </div>
+                                    <button onClick={() => setViewingRecord(null)} className="p-2 hover:bg-gray-200 rounded-lg transition-colors">
+                                        <X size={18} className="text-gray-500" />
+                                    </button>
+                                </div>
+
+                                {/* Body */}
+                                <div className="p-6 overflow-y-auto space-y-5">
+                                    {/* Summary */}
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase text-gray-400 mb-1 tracking-wider">Summary</p>
+                                        <p className="text-sm text-gray-700">{viewingRecord.summary}</p>
+                                    </div>
+
+                                    {/* Doctor clinical notes from store */}
+                                    {storePatient?.description && (
+                                        <div>
+                                            <p className="text-xs font-semibold uppercase text-gray-400 mb-1 tracking-wider">Clinical Notes</p>
+                                            <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 text-sm text-gray-700 leading-relaxed">
+                                                {storePatient.description}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* PDF Attachments */}
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase text-gray-400 mb-2 tracking-wider flex items-center gap-1.5">
+                                            <Paperclip size={12} /> Attachments
+                                        </p>
+                                        {storePatient?.attachments?.length > 0 ? (
+                                            <div className="space-y-2">
+                                                {storePatient.attachments.map(att => (
+                                                    <a
+                                                        key={att.url}
+                                                        href={att.url}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 hover:bg-blue-100 transition-colors group"
+                                                    >
+                                                        <FileText size={18} className="text-blue-500 flex-shrink-0" />
+                                                        <span className="text-sm font-medium text-blue-700 group-hover:underline truncate">{att.name}</span>
+                                                        <span className="text-xs text-blue-400 ml-auto flex-shrink-0">Open ↗</span>
+                                                    </a>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-gray-400 italic">No attachments uploaded by your doctor yet.</p>
+                                        )}
+                                    </div>
+
+                                    {/* Doctor Feedback in record detail */}
+                                    {storePatient?.feedback?.length > 0 && (
+                                        <div>
+                                            <p className="text-xs font-semibold uppercase text-gray-400 mb-2 tracking-wider flex items-center gap-1.5">
+                                                <MessageSquare size={12} /> Doctor's Feedback
+                                            </p>
+                                            <div className="space-y-2">
+                                                {storePatient.feedback.map((f, i) => (
+                                                    <div key={i} className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+                                                        <p className="text-xs text-amber-500 font-semibold mb-1">{f.date}</p>
+                                                        <p className="text-sm text-gray-700 leading-relaxed">{f.message}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Status badge */}
+                                    <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                                        <span className="text-xs text-gray-400">Record Status</span>
+                                        <StatusBadge status={viewingRecord.status} />
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )
+                })()}
+            </AnimatePresence>
+
+            {/* Grant Doctor Access Modal */}
+            <AnimatePresence>
+                {grantModal.isOpen && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                        onClick={() => setGrantModal({ isOpen: false, dependent: null })}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 20 }}
+                            className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                                <div>
+                                    <h3 className="text-lg font-bold text-gray-900">Grant Doctor Access</h3>
+                                    <p className="text-sm text-gray-500">For {grantModal.dependent?.name}</p>
+                                </div>
+                                <button onClick={() => setGrantModal({ isOpen: false, dependent: null })} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                                    <X size={18} className="text-gray-400" />
+                                </button>
+                            </div>
+                            <form onSubmit={(e) => {
+                                e.preventDefault()
+                                setGrantModal({ isOpen: false, dependent: null })
+                                setToast({ id: Date.now(), action: 'approved', message: `Access granted for ${grantModal.dependent?.name} to ${grantDoctor}` })
+                                setTimeout(() => setToast(null), 3000)
+                            }} className="p-6 space-y-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Doctor Name</label>
+                                    <input
+                                        required
+                                        type="text"
+                                        value={grantDoctor}
+                                        onChange={e => setGrantDoctor(e.target.value)}
+                                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                                        placeholder="e.g. Dr. Emily Sharma"
+                                    />
+                                </div>
+                                <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-3">
+                                    <p className="text-xs text-indigo-700"><strong>Note:</strong> As the registered guardian/emergency contact for {grantModal.dependent?.name}, you are authorizing this doctor to view their medical records.</p>
+                                </div>
+                                <div className="flex items-center justify-end gap-3 pt-2">
+                                    <button type="button" onClick={() => setGrantModal({ isOpen: false, dependent: null })} className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors">Cancel</button>
+                                    <button type="submit" className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors shadow-sm">Grant Access</button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* QR Modal */}
             <AnimatePresence>
                 {showQR && (
-                    <motion.div 
+                    <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" 
+                        className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
                         onClick={() => setShowQR(false)}
                     >
-                        <motion.div 
+                        <motion.div
                             initial={{ scale: 0.9, y: 20 }}
                             animate={{ scale: 1, y: 0 }}
                             exit={{ scale: 0.9, y: 20 }}
-                            className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full" 
+                            className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full"
                             onClick={e => e.stopPropagation()}
                         >
                             <div className="text-center">
@@ -357,7 +621,7 @@ export default function PatientDashboard() {
                         ) : (
                             <XCircle size={20} className="text-red-400" />
                         )}
-                        <span>Request #{toast.id} {toast.action}</span>
+                        <span>{toast.message || `Request #${toast.id} ${toast.action}`}</span>
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -366,3 +630,4 @@ export default function PatientDashboard() {
         </div>
     )
 }
+

@@ -1,5 +1,6 @@
 import { useAuth0 } from '@auth0/auth0-react'
 import { useNavigate } from 'react-router-dom'
+import Logo from '../components/Logo'
 
 export default function LandingPage({ noRole }) {
     const { isAuthenticated, user } = useAuth0()
@@ -8,20 +9,18 @@ export default function LandingPage({ noRole }) {
     return (
         <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-teal-50">
             {/* Header */}
-            <header className="bg-green-700 shadow-lg">
+            <header style={{ backgroundColor: '#adebb3' }} className="shadow-lg">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center">
-                            <span className="text-green-700 font-bold text-lg">HC</span>
-                        </div>
+                        <Logo className="w-10 h-10" />
                         <div>
-                            <h1 className="text-white font-bold text-xl leading-tight">HealthConnect</h1>
-                            <p className="text-green-200 text-xs">Secure Medical Records Platform</p>
+                            <h1 className="text-gray-900 font-bold text-xl leading-tight">HealthConnect</h1>
+                            <p className="text-gray-700 text-xs">Secure Medical Records Platform</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 bg-green-300 rounded-full animate-pulse"></span>
-                        <span className="text-green-200 text-sm">System Operational</span>
+                        <span className="w-2 h-2 bg-green-600 rounded-full animate-pulse"></span>
+                        <span className="text-gray-800 text-sm">System Operational</span>
                     </div>
                 </div>
             </header>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth0 } from '@auth0/auth0-react'
+import Logo from '../components/Logo'
 
 const CREDENTIAL_TYPES = [
     { value: '', label: 'Select credential type...' },
@@ -68,9 +69,7 @@ export default function DoctorVerifyPage() {
             <header style={{ backgroundColor: '#1d4ed8' }} className="shadow-md flex-none">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 bg-white rounded-full flex items-center justify-center">
-                            <span className="text-blue-700 font-bold text-sm">HC</span>
-                        </div>
+                        <Logo className="w-9 h-9" />
                         <div>
                             <p className="text-white font-bold text-lg leading-tight">HealthConnect</p>
                             <p className="text-blue-200 text-xs">Doctor Portal</p>
