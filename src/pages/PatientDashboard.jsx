@@ -19,6 +19,10 @@ const mockRequests = [
     { id: 2, doctor: 'Dr. Marcus Lee', specialty: 'Cardiology', hospital: 'St. Michael\'s Hospital', date: '2026-03-07', reason: 'Cardiac risk assessment' },
 ]
 
+const mockEmergencyRequests = [
+    { id: 'em-1', doctor: 'Dr. Sarah Chen', hospital: 'General Hospital ER', patientName: 'Fatima Khan (Dependent)', time: 'Just now', reason: 'Patient unconscious, required for immediate treatment determination' }
+]
+
 const mockAuditLog = [
     { id: 1, action: 'Record Accessed', actor: 'Dr. Amir Patel', time: '2026-03-07 09:14 AM' },
     { id: 2, action: 'Access Granted', actor: 'You', time: '2026-03-06 03:22 PM' },
@@ -58,7 +62,8 @@ function StatusBadge({ status }) {
 export default function PatientDashboard() {
     const { user, logout } = useAuth0()
     const [requests, setRequests] = useState(mockRequests)
-    const [showQR, setShowQR] = useState(false)
+    const [emergencyRequests, setEmergencyRequests] = useState(mockEmergencyRequests)
+    const [showAlerts, setShowAlerts] = useState(false)
     const [toast, setToast] = useState(null)
     const [grantModal, setGrantModal] = useState({ isOpen: false, dependent: null })
     const [grantDoctor, setGrantDoctor] = useState('')
@@ -130,11 +135,16 @@ export default function PatientDashboard() {
                     <motion.button
                         initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
                         whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                        onClick={() => setShowQR(true)}
-                        className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow-sm transition-colors text-sm"
+                        onClick={() => setShowAlerts(true)}
+                        className="relative inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow-sm transition-colors text-sm"
                     >
                         <AlertCircle size={18} />
-                        View Emergency QR
+                        Emergency Alerts
+                        {emergencyRequests.length > 0 && (
+                            <span className="absolute -top-2 -right-2 bg-white text-red-600 border-2 border-red-600 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow-sm">
+                                {emergencyRequests.length}
+                            </span>
+                        )}
                     </motion.button>
                 </div>
             </div>
@@ -564,43 +574,90 @@ export default function PatientDashboard() {
                 )}
             </AnimatePresence>
 
-            {/* QR Modal */}
+            {/* Emergency Alerts Modal */}
             <AnimatePresence>
-                {showQR && (
+                {showAlerts && (
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-                        onClick={() => setShowQR(false)}
+                        onClick={() => setShowAlerts(false)}
                     >
                         <motion.div
                             initial={{ scale: 0.9, y: 20 }}
                             animate={{ scale: 1, y: 0 }}
                             exit={{ scale: 0.9, y: 20 }}
-                            className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full"
+                            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[85vh]"
                             onClick={e => e.stopPropagation()}
                         >
-                            <div className="text-center">
-                                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-sm">
-                                    <AlertCircle size={32} className="text-red-600" />
-                                </div>
-                                <h3 className="text-xl font-bold text-gray-900 mb-2">Emergency Access</h3>
-                                <p className="text-gray-500 text-sm mb-6">Scan to view emergency medical information without login.</p>
-                                <div className="w-48 h-48 bg-white border border-gray-200 shadow-sm rounded-xl mx-auto flex items-center justify-center mb-6">
-                                    <div className="text-center">
-                                        {/* Placeholder for QR - In real app use qrcode.react */}
-                                        <div className="grid grid-cols-2 gap-1 mb-2">
-                                            <div className="w-8 h-8 bg-black"></div><div className="w-8 h-8 bg-black"></div>
-                                            <div className="w-8 h-8 bg-black"></div><div className="w-8 h-8 bg-white border border-black"></div>
-                                        </div>
-                                        <p className="text-gray-400 text-xs">Emergency QR</p>
+                            {/* Header */}
+                            <div className="flex items-center justify-between px-6 py-4 border-b border-red-100 bg-red-50">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                                        <AlertCircle size={18} className="text-red-600" />
                                     </div>
+                                    <h3 className="text-lg font-bold text-red-900">Emergency Alerts</h3>
                                 </div>
-                                <p className="text-xs text-red-600 font-medium mb-6 bg-red-50 p-2 rounded-lg">Share this only with first responders.</p>
-                                <button onClick={() => setShowQR(false)} className="w-full bg-gray-900 text-white py-3 rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-md">
-                                    Close
+                                <button onClick={() => setShowAlerts(false)} className="p-2 hover:bg-red-100 rounded-lg transition-colors">
+                                    <X size={18} className="text-red-700" />
                                 </button>
+                            </div>
+
+                            {/* Body */}
+                            <div className="p-6 overflow-y-auto bg-gray-50 flex-1">
+                                {emergencyRequests.length === 0 ? (
+                                    <div className="text-center py-8">
+                                        <Shield size={48} className="text-green-400 mx-auto mb-3 opacity-50" />
+                                        <p className="text-gray-500 font-medium">No active emergency requests.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {emergencyRequests.map(req => (
+                                            <div key={req.id} className="bg-white border-2 border-red-100 rounded-xl p-5 shadow-sm relative overflow-hidden">
+                                                <div className="absolute top-0 left-0 w-1 h-full bg-red-500"></div>
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <div>
+                                                        <h4 className="font-bold text-gray-900 text-lg">{req.doctor}</h4>
+                                                        <p className="text-sm text-gray-500">{req.hospital}</p>
+                                                    </div>
+                                                    <span className="text-xs bg-red-100 text-red-700 font-bold px-2.5 py-1 rounded-md">{req.time}</span>
+                                                </div>
+
+                                                <div className="bg-red-50 rounded-lg p-3 mb-4">
+                                                    <p className="text-xs text-red-800 font-semibold mb-1 uppercase tracking-wider">Patient</p>
+                                                    <p className="text-sm font-medium text-red-900">{req.patientName}</p>
+                                                    <div className="h-px bg-red-100 my-2"></div>
+                                                    <p className="text-xs text-red-800 font-semibold mb-1 uppercase tracking-wider">Reason provided</p>
+                                                    <p className="text-sm text-red-900">{req.reason}</p>
+                                                </div>
+
+                                                <div className="flex gap-3">
+                                                    <button
+                                                        onClick={() => {
+                                                            setEmergencyRequests(prev => prev.filter(r => r.id !== req.id))
+                                                            setToast({ id: req.id, action: 'approved', message: `Emergency access granted to ${req.doctor}` })
+                                                            setTimeout(() => setToast(null), 3000)
+                                                        }}
+                                                        className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2"
+                                                    >
+                                                        <CheckCircle size={18} /> Approve Immediate Access
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setEmergencyRequests(prev => prev.filter(r => r.id !== req.id))
+                                                            setToast({ id: req.id, action: 'denied', message: `Emergency access denied for ${req.doctor}` })
+                                                            setTimeout(() => setToast(null), 3000)
+                                                        }}
+                                                        className="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-lg font-bold transition-colors flex items-center justify-center"
+                                                    >
+                                                        Deny
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </motion.div>
                     </motion.div>
