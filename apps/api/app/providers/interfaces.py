@@ -10,6 +10,20 @@ class AISummaryProvider(ABC):
     def generate_doctor_brief(self, *, patient_context: str, visit_context: str | None = None) -> str:
         raise NotImplementedError
 
+    @abstractmethod
+    def generate_audit_summary(self, *, audit_events: list[dict]) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
+    def generate_visit_recommendation(
+        self,
+        *,
+        patient_context: str,
+        last_physical_date: str | None = None,
+        current_symptoms: list[str] | None = None,
+    ) -> str:
+        raise NotImplementedError
+
 
 class TTSProvider(ABC):
     @abstractmethod

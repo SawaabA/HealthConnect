@@ -9,6 +9,8 @@ import EmergencyCard from './pages/EmergencyCard'
 import AdminDashboard from './pages/AdminDashboard'
 import { extractRole } from './lib/auth'
 
+const ADMIN_ENABLED = import.meta.env.VITE_ENABLE_ADMIN === 'true'
+
 // Extract role from Auth0 token claims
 function useUserRole() {
   const { user } = useAuth0()
@@ -67,7 +69,9 @@ function RoleRedirect() {
   if (effectiveRole === 'patient') return <Navigate to="/patient" replace />
   if (effectiveRole === 'guardian') return <Navigate to="/guardian" replace />
   if (effectiveRole === 'doctor') return <Navigate to="/doctor-verify" replace />
-  if (effectiveRole === 'admin') return <Navigate to="/admin" replace />
+  if (effectiveRole === 'admin') {
+    return <Navigate to={ADMIN_ENABLED ? "/admin" : "/doctor"} replace />
+  }
   return <LandingPage noRole />
 }
 
@@ -114,14 +118,16 @@ export default function App() {
             </DoctorRoute>
           }
         />
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute requiredRole="admin">
-              <AdminDashboard />
-            </ProtectedRoute>
-          }
-        />
+        {ADMIN_ENABLED ? (
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+        ) : null}
 
         <Route path="/emergency/:patientId" element={<EmergencyCard />} />
         <Route path="*" element={<Navigate to="/" replace />} />

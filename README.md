@@ -75,6 +75,25 @@ flowchart LR
 - AI: Backboard provider abstraction (`BackboardProvider`, `MockProvider`)
 - Accessibility: ElevenLabs TTS abstraction (`ElevenLabsProvider`, `MockTTSProvider`)
 
+## Demo Backend Decision
+
+Pick one backend contract as your demo source of truth before final QA:
+
+1. `fastapi` mode (default)
+   - Web calls `apps/api` endpoints under `/api/v1`.
+   - Uses seeded integer IDs (`patient=1`, `guardian=2`, `doctor=3`, `admin=4`).
+   - Best when your FastAPI stack is what you are pitching.
+2. `legacy` mode (partner Node/Express server)
+   - Web calls partner endpoints under `/api/...` on the Vultr host.
+   - Supports partner AI agent endpoints (`/api/ai/*`, `/api/reports/generate`).
+   - Best when partner backend is what you are pitching.
+
+Switching mode is env-only:
+
+- `VITE_BACKEND_MODE=fastapi` or `VITE_BACKEND_MODE=legacy`
+- `VITE_API_URL` / `VITE_FASTAPI_URL` for FastAPI
+- `VITE_LEGACY_API_URL` for partner backend
+
 ## Monorepo Structure
 
 ```text
@@ -216,13 +235,33 @@ Templates:
 Key groups:
 
 - Auth0 (web): `VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID`, `VITE_AUTH0_AUDIENCE`, `VITE_AUTH0_ROLE_NAMESPACE`
-- Web API routing: `VITE_API_URL`
-- Dev user mapping (current backend auth bridge): `VITE_DEV_PATIENT_USER_ID`, `VITE_DEV_GUARDIAN_USER_ID`, `VITE_DEV_DOCTOR_USER_ID`, `VITE_DEV_ADMIN_USER_ID`
+- Web backend routing: `VITE_BACKEND_MODE`, `VITE_API_URL`, `VITE_FASTAPI_URL`, `VITE_LEGACY_API_URL`
+- Optional admin UI toggle: `VITE_ENABLE_ADMIN` (`false` by default for demo teams without admin flow)
+- Legacy partner mapping (optional): `VITE_LEGACY_PATIENT_ID`, `VITE_LEGACY_DOCTOR_ID`
+- FastAPI demo mapping: `VITE_DEMO_PATIENT_ID`, `VITE_DEV_PATIENT_USER_ID`, `VITE_DEV_GUARDIAN_USER_ID`, `VITE_DEV_DOCTOR_USER_ID`, `VITE_DEV_ADMIN_USER_ID`
 - Backboard: `AI_PROVIDER`, `BACKBOARD_BASE_URL`, `BACKBOARD_API_KEY`
 - ElevenLabs: `TTS_PROVIDER`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`
 - Vultr Storage: `STORAGE_PROVIDER`, `VULTR_OBJECT_STORAGE_*`, `VULTR_BUCKET_NAME`, credentials
 - DB: `DATABASE_URL`
 - Tailscale: `TAILSCALE_AUTH_KEY` (deployment-level usage)
+
+## Auth + Network Checklist
+
+Before demo day, verify all of these once:
+
+1. Auth0 app URLs
+   - Allowed Callback URLs includes exact frontend URL(s): `http://localhost:3000`, `http://127.0.0.1:3000`, and any Tailscale/Vultr demo URL.
+   - Allowed Logout URLs includes the same origins.
+   - Allowed Web Origins includes the same origins.
+2. Frontend URL consistency
+   - Dev server runs on one fixed port (`3000`) using `vite --strictPort`.
+   - Do not use mixed ports (`3000` vs `3001`) for the same Auth0 app.
+3. API CORS
+   - FastAPI `CORS_ORIGINS` includes your frontend origin(s).
+   - Partner Node backend allows CORS from your frontend origin(s).
+4. Private networking
+   - Tailscale is connected on your laptop and server.
+   - Database host is reachable over tailnet before starting API.
 
 ## Integration Points
 
@@ -249,6 +288,10 @@ Key groups:
 - Provider: `apps/api/app/providers/backboard_provider.py`
 - Service usage: `apps/api/app/services/summary_service.py`
 - Switch provider by setting `AI_PROVIDER=backboard`.
+- Trigger endpoints (FastAPI mode):
+  - `POST /api/v1/summaries/patients/{patient_id}/patient-friendly`
+  - `POST /api/v1/summaries/requests/{request_id}/doctor-brief`
+  - `POST /api/v1/summaries/patients/{patient_id}/audit-digest`
 
 ### ElevenLabs API
 
