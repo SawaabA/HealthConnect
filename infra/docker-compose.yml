@@ -1,0 +1,79 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: healthconnect-db
+    environment:
+      POSTGRES_DB: healthconnect
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - healthconnect_private
+
+  api:
+    build:
+      context: ../apps/api
+      dockerfile: Dockerfile
+    container_name: healthconnect-api
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/healthconnect
+      DISABLE_AUTH: "true"
+      AI_PROVIDER: mock
+      TTS_PROVIDER: mock
+      STORAGE_PROVIDER: local
+      LOCAL_STORAGE_PATH: /data/audio
+      AUTH0_DOMAIN: ${AUTH0_DOMAIN:-}
+      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:-}
+      AUTH0_ISSUER: ${AUTH0_ISSUER:-}
+      BACKBOARD_API_KEY: ${BACKBOARD_API_KEY:-}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      VULTR_OBJECT_STORAGE_ENDPOINT: ${VULTR_OBJECT_STORAGE_ENDPOINT:-}
+      VULTR_BUCKET_NAME: ${VULTR_BUCKET_NAME:-}
+      VULTR_ACCESS_KEY: ${VULTR_ACCESS_KEY:-}
+      VULTR_SECRET_KEY: ${VULTR_SECRET_KEY:-}
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../apps/api:/app
+      - healthconnect_audio:/data/audio
+    depends_on:
+      - db
+    networks:
+      - healthconnect_private
+      - healthconnect_edge
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    container_name: healthconnect-web
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://api:8000/api/v1
+      NEXT_PUBLIC_AUTH0_DOMAIN: ${NEXT_PUBLIC_AUTH0_DOMAIN:-}
+      NEXT_PUBLIC_AUTH0_CLIENT_ID: ${NEXT_PUBLIC_AUTH0_CLIENT_ID:-}
+      NEXT_PUBLIC_AUTH0_AUDIENCE: ${NEXT_PUBLIC_AUTH0_AUDIENCE:-}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ..:/workspace
+      - /workspace/node_modules
+    depends_on:
+      - api
+    networks:
+      - healthconnect_edge
+
+networks:
+  healthconnect_private:
+    driver: bridge
+    internal: true
+  healthconnect_edge:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  healthconnect_audio:

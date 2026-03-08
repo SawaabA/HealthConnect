@@ -1,0 +1,134 @@
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.models.enums import AuditAction, SummaryType
+from app.providers.backboard_provider import BackboardProvider
+from app.providers.interfaces import AISummaryProvider, ObjectStorageProvider, TTSProvider
+from app.providers.elevenlabs_provider import ElevenLabsProvider
+from app.providers.mock_provider import MockProvider
+from app.providers.mock_tts_provider import MockTTSProvider
+from app.providers.storage_provider import LocalStorageProvider, VultrObjectStorageProvider
+from app.repositories.summary_repository import SummaryRepository
+from app.services.audit_service import AuditService
+
+
+def resolve_summary_provider() -> AISummaryProvider:
+    if settings.ai_provider.lower() == "backboard":
+        return BackboardProvider()
+    return MockProvider()
+
+
+def resolve_tts_provider() -> TTSProvider:
+    if settings.tts_provider.lower() == "elevenlabs":
+        return ElevenLabsProvider()
+    return MockTTSProvider()
+
+
+def resolve_storage_provider() -> ObjectStorageProvider:
+    if settings.storage_provider.lower() == "vultr":
+        return VultrObjectStorageProvider()
+    return LocalStorageProvider()
+
+
+class SummaryService:
+    def __init__(
+        self,
+        db: Session,
+        summary_provider: AISummaryProvider | None = None,
+        tts_provider: TTSProvider | None = None,
+        storage_provider: ObjectStorageProvider | None = None,
+    ) -> None:
+        self.db = db
+        self.summary_provider = summary_provider or resolve_summary_provider()
+        self.tts_provider = tts_provider or resolve_tts_provider()
+        self.storage_provider = storage_provider or resolve_storage_provider()
+        self.summaries = SummaryRepository(db)
+        self.audit = AuditService(db)
+
+    def generate_patient_summary(
+        self,
+        *,
+        patient_id: int,
+        patient_context: str,
+        request_reason: str | None = None,
+        access_request_id: int | None = None,
+    ):
+        generated = self.summary_provider.generate_patient_summary(
+            patient_context=patient_context,
+            request_reason=request_reason,
+        )
+        content = self._with_disclaimer(generated)
+        summary = self.summaries.create(
+            patient_id=patient_id,
+            summary_type=SummaryType.PATIENT_EXPLANATION.value,
+            content=content,
+            disclaimer=settings.summary_disclaimer,
+            access_request_id=access_request_id,
+        )
+        self.audit.log(
+            actor_user_id=None,
+            action=AuditAction.SUMMARY_GENERATED.value,
+            access_request_id=access_request_id,
+            details={"summary_id": summary.id, "summary_type": SummaryType.PATIENT_EXPLANATION.value},
+        )
+        self.db.commit()
+        return summary
+
+    def generate_doctor_brief(
+        self,
+        *,
+        patient_id: int,
+        patient_context: str,
+        visit_context: str | None = None,
+        access_request_id: int | None = None,
+    ):
+        generated = self.summary_provider.generate_doctor_brief(
+            patient_context=patient_context,
+            visit_context=visit_context,
+        )
+        content = self._with_disclaimer(generated)
+        summary = self.summaries.create(
+            patient_id=patient_id,
+            summary_type=SummaryType.DOCTOR_BRIEF.value,
+            content=content,
+            disclaimer=settings.summary_disclaimer,
+            access_request_id=access_request_id,
+        )
+        self.audit.log(
+            actor_user_id=None,
+            action=AuditAction.SUMMARY_GENERATED.value,
+            access_request_id=access_request_id,
+            details={"summary_id": summary.id, "summary_type": SummaryType.DOCTOR_BRIEF.value},
+        )
+        self.db.commit()
+        return summary
+
+    def synthesize_audio(self, *, summary_id: int, voice_id: str | None = None):
+        summary = self.summaries.get_by_id(summary_id)
+        if summary is None:
+            raise ValueError("Summary not found")
+
+        audio = self.tts_provider.synthesize(text=summary.content, voice_id=voice_id)
+        storage_key = f"summaries/{summary.id}.mp3"
+        self.storage_provider.upload_bytes(key=storage_key, content=audio, content_type="audio/mpeg")
+        summary.audio_storage_key = storage_key
+        self.summaries.save(summary)
+
+        self.audit.log(
+            actor_user_id=None,
+            action=AuditAction.AUDIO_GENERATED.value,
+            access_request_id=summary.access_request_id,
+            details={"summary_id": summary.id, "audio_storage_key": storage_key},
+        )
+        self.db.commit()
+        return summary
+
+    def list_patient_summaries(self, *, patient_id: int):
+        return self.summaries.list_by_patient(patient_id)
+
+    @staticmethod
+    def _with_disclaimer(content: str) -> str:
+        disclaimer = settings.summary_disclaimer
+        if disclaimer in content:
+            return content
+        return f"{content}\n\n{disclaimer}"
